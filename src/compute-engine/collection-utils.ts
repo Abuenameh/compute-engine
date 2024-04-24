@@ -56,11 +56,12 @@ export function isFiniteIndexableCollection(col: BoxedExpression): boolean {
  *
  * @returns
  */
-export function* each(col: BoxedExpression): Generator<BoxedExpression> {
+export function each(col: BoxedExpression): BoxedExpression[] {
+  const arr: BoxedExpression[] = [];
   const iter = iterator(col);
   if (!iter) {
-    yield col;
-    return;
+    arr.push(col);
+    return arr;
   }
 
   // We've got an iterator, iterate over it
@@ -68,12 +69,12 @@ export function* each(col: BoxedExpression): Generator<BoxedExpression> {
   let i = 0;
   while (true) {
     const { done, value } = iter.next();
-    if (done) return;
+    if (done) return arr;
     if (i++ > limit) {
-      yield col.engine.error('iteration-limit-exceeded');
-      return;
+      arr.push(col.engine.error('iteration-limit-exceeded'));
+      return arr;
     }
-    yield value;
+    arr.push(value);
   }
 }
 

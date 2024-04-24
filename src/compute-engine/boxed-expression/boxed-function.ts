@@ -264,11 +264,13 @@ export class BoxedFunction extends _BoxedExpression {
     return this._canonical;
   }
 
-  *map<T = BoxedExpression>(
+  map<T = BoxedExpression>(
     fn: (x: BoxedExpression) => T
   ): IterableIterator<T> {
+    const arr: T[] = [];
     let i = 0;
-    while (i < this._ops.length) yield fn(this._ops[i++]);
+    while (i < this._ops.length) arr.push(fn(this._ops[i++]));
+    return arr[Symbol.iterator]();
   }
 
   // Note: the resulting expression is bound to the current scope, not

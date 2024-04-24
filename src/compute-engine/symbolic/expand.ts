@@ -79,14 +79,16 @@ function multinomialCoefficient(k: number[]): number {
 }
 
 // Return all the combinations of n non-negative integers that sum to exp.
-function* powers(n: number, exp: number): Generator<number[]> {
+function powers(n: number, exp: number): number[][] {
+  let arr: number[][] = [];
   if (n === 1) {
-    yield [exp];
-    return;
+    arr.push([exp]);
+    return arr;
   }
 
   for (let i = 0; i <= exp; i += 1)
-    for (const p of powers(n - 1, exp - i)) yield [i, ...p];
+    for (const p of powers(n - 1, exp - i)) arr.push([i, ...p]);
+  return arr;
 }
 
 /** Use the multinomial theorem (https://en.wikipedia.org/wiki/Multinomial_theorem) to expand the expression.

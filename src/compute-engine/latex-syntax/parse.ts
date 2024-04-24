@@ -2099,13 +2099,16 @@ export class _Parser implements Parser {
   }
 
   /** Return all defs of the specified kind */
-  *getDefs(kind: string): Iterable<IndexedLatexDictionaryEntry> {
+  getDefs(kind: string): Iterable<IndexedLatexDictionaryEntry> {
+    let arr: IndexedLatexDictionaryEntry[] = [];
     if (kind === 'operator') {
       for (const def of this._dictionary.defs)
-        if (/^prefix|infix|postfix/.test(def.kind)) yield def;
+        if (/^prefix|infix|postfix/.test(def.kind)) arr.push(def);
     } else {
-      for (const def of this._dictionary.defs) if (def.kind === kind) yield def;
+      for (const def of this._dictionary.defs)
+        if (def.kind === kind) arr.push(def);
     }
+    return arr;
   }
 }
 
