@@ -1,5 +1,5 @@
 {
-  "version": "0.24.1",
+  "version": "0.24.1-abu-0",
   "scripts": {
     "doc": "bash ./scripts/doc.sh",
     "build": "bash ./scripts/build.sh",
@@ -13,14 +13,14 @@
     "version": "bash ./scripts/version.sh",
     "test": "bash ./scripts/test.sh"
   },
-  "name": "@cortex-js/compute-engine",
+  "name": "@abuenameh/compute-engine",
   "description": "Symbolic computing and numeric evaluations for JavaScript and Node.js",
   "homepage": "https://cortexjs.io/compute-engine/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cortex-js/compute-engine.git"
+    "url": "https://github.com/abuenameh/compute-engine.git"
   },
-  "bugs": "https://github.com/cortex-js/compute-engine/issues/",
+  "bugs": "https://github.com/abuenameh/compute-engine/issues/",
   "publishConfig": {
     "access": "public"
   },
