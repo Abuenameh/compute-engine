@@ -2079,19 +2079,21 @@ export class _Parser implements Parser {
    * for matchfix[], which maps to a List, and a logic definition which
    * matches to Boole. The logic definition should take precedence.)
    */
-  *getDefs(kind: string): Iterable<IndexedLatexDictionaryEntry> {
+  getDefs(kind: string): Iterable<IndexedLatexDictionaryEntry> {
+    let arr: IndexedLatexDictionaryEntry[] = [];
     if (kind === 'operator') {
       for (let i = this._dictionary.defs.length - 1; i >= 0; i--) {
         const def = this._dictionary.defs[i];
-        if (/^prefix|infix|postfix/.test(def.kind)) yield def;
+        if (/^prefix|infix|postfix/.test(def.kind)) arr.push(def);
       }
     } else {
       // Iterate over the definitions, backwards
       for (let i = this._dictionary.defs.length - 1; i >= 0; i--) {
         const def = this._dictionary.defs[i];
-        if (def.kind === kind) yield def;
+        if (def.kind === kind) arr.push(def);
       }
     }
+    return arr;
   }
 }
 
