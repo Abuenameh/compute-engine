@@ -1,14 +1,10 @@
-import { Complex } from 'complex.js';
-import { Decimal } from 'decimal.js';
-
-import { BoxedExpression, Rational } from '../public';
-
 import { factorPower, gcd } from './numeric';
-import {
-  bigint,
-  gcd as bigGcd,
-  factorPower as bigFactorPower,
-} from './numeric-bigint';
+import { gcd as bigGcd, factorPower as bigFactorPower } from './numeric-bigint';
+
+/**
+ * @category Boxed Expression
+ */
+export type Rational = [number, number] | [bigint, bigint];
 
 export function isRational(x: any | null): x is Rational {
   return x !== null && Array.isArray(x);
@@ -22,22 +18,22 @@ export function isBigRational(x: any | null): x is [bigint, bigint] {
   return x !== null && Array.isArray(x) && typeof x[0] === 'bigint';
 }
 
-export function isRationalZero(x: Rational): boolean {
+export function isZero(x: Rational): boolean {
   // Note '==' to convert bigint to number
   return x[0] == 0;
 }
 
-export function isRationalOne(x: Rational): boolean {
+export function isOne(x: Rational): boolean {
   return x[0] === x[1];
 }
 
-// True if the denominator is 1
-export function isRationalInteger(x: Rational): boolean {
-  return x[1] === 1 || x[1] === BigInt(1);
+export function isNegativeOne(x: Rational): boolean {
+  return x[0] === -x[1];
 }
 
-export function isRationalNegativeOne(x: Rational): boolean {
-  return x[0] === -x[1];
+// True if the denominator is 1
+export function isInteger(x: Rational): boolean {
+  return x[1] === 1 || x[1] === BigInt(1);
 }
 
 export function machineNumerator(x: Rational): number {
@@ -46,6 +42,10 @@ export function machineNumerator(x: Rational): number {
 
 export function machineDenominator(x: Rational): number {
   return Number(x[1]);
+}
+
+export function rationalAsFloat(x: Rational): number {
+  return Number(x[0]) / Number(x[1]);
 }
 
 export function isNeg(x: Rational): boolean {
@@ -66,126 +66,8 @@ export function inverse(x: Rational): Rational {
   return (x[0] < 0 ? [-x[1], -x[0]] : [x[1], x[0]]) as Rational;
 }
 
-export function asRational(expr: BoxedExpression): Rational | undefined {
-  const num = expr.numericValue;
-  if (Array.isArray(num)) return num;
-  if (num === null) return undefined;
-  if (typeof num === 'number' && Number.isInteger(num)) {
-    if (num > 1e9 || num < -1e9) return [bigint(num), BigInt(1)];
-    return [num, 1];
-  }
-  if (num instanceof Decimal && num.isInteger())
-    return [bigint(num), BigInt(1)];
-  return undefined;
-}
-
 function asMachineRational(r: Rational): [number, number] {
   return [Number(r[0]), Number(r[1])];
-}
-
-/**
- * Add a literal numeric value to a rational.
- * If the rational is a bigint, this is a hint to do the calculation in bigint
- * (no need to check `bignumPreferred()`).
- * @param lhs
- * @param rhs
- * @returns
- */
-export function add(lhs: Rational, rhs: BoxedExpression | Rational): Rational {
-  console.assert(
-    Array.isArray(rhs) ||
-      (rhs.numericValue !== null && !(rhs.numericValue instanceof Complex))
-  );
-  // If the lhs is infinity (or NaN) return as is
-  // (note that bigint cannot be infinite)
-  if (typeof lhs[0] === 'number' && !Number.isFinite(lhs[0])) return lhs;
-
-  const rhsNum = Array.isArray(rhs) ? rhs : rhs.numericValue;
-
-  if (rhsNum === null) return lhs;
-
-  if (Array.isArray(rhsNum)) {
-    if (isBigRational(rhsNum)) {
-      lhs = [BigInt(lhs[0]), BigInt(lhs[1])];
-      return [rhsNum[1] * lhs[0] + rhsNum[0] * lhs[1], rhsNum[1] * lhs[1]];
-    }
-    if (!Number.isFinite(rhsNum[0])) return rhsNum;
-    if (isBigRational(lhs)) {
-      const bigRhs = [BigInt(rhsNum[0]), BigInt(rhsNum[1])];
-      return [bigRhs[1] * lhs[0] + bigRhs[0] * lhs[1], bigRhs[1] * lhs[1]];
-    }
-    return [rhsNum[1] * lhs[0] + rhsNum[0] * lhs[1], rhsNum[1] * lhs[1]];
-  }
-
-  if (rhsNum instanceof Decimal) {
-    if (rhsNum.isNaN()) return [Number.NaN, 1];
-    if (!rhsNum.isFinite())
-      return [rhsNum.isNegative() ? -Infinity : Infinity, 1];
-
-    console.assert(rhsNum.isInteger());
-
-    if (isMachineRational(lhs)) lhs = [BigInt(lhs[0]), BigInt(lhs[1])];
-    // Decimal and Rational return a bigRational
-    return [lhs[0] + lhs[1] * bigint(rhsNum.toString()), lhs[1]];
-  }
-
-  // Can't add a complex to a rational
-  if (rhsNum instanceof Complex) return [Number.NaN, 1];
-
-  console.assert(!Number.isFinite(rhsNum) || Number.isInteger(rhsNum));
-
-  if (!Number.isFinite(rhsNum)) return [rhsNum, 1];
-
-  if (isMachineRational(lhs)) return [lhs[0] + lhs[1] * rhsNum, lhs[1]];
-
-  // By this point, lhs is a bigRational, rhsNum is a number
-  return [lhs[0] + lhs[1] * bigint(rhsNum), lhs[1]];
-}
-
-export function mul(lhs: Rational, rhs: BoxedExpression | Rational): Rational {
-  console.assert(
-    Array.isArray(rhs) ||
-      (rhs.numericValue !== null && !(rhs instanceof Complex))
-  );
-
-  if (Array.isArray(rhs)) {
-    if (isMachineRational(lhs) && isMachineRational(rhs))
-      return [lhs[0] * rhs[0], lhs[1] * rhs[1]];
-    if (isMachineRational(lhs)) lhs = [bigint(lhs[0]), bigint(lhs[1])];
-    if (isMachineRational(rhs)) rhs = [bigint(rhs[0]), bigint(rhs[1])];
-    return [lhs[0] * rhs[0], lhs[1] * rhs[1]];
-  }
-
-  const rhsNum = rhs.numericValue;
-  if (rhsNum !== null && typeof rhsNum === 'number') {
-    console.assert(Number.isInteger(rhsNum));
-    if (isMachineRational(lhs)) return [lhs[0] * rhsNum, lhs[1]];
-    return [lhs[0] * bigint(rhsNum), lhs[1]];
-  }
-
-  if (rhsNum instanceof Decimal) {
-    console.assert(rhsNum.isInteger());
-    if (isMachineRational(lhs))
-      return [bigint(rhsNum.toString()) * bigint(lhs[0]), bigint(lhs[1])];
-    return [bigint(rhsNum.toString()) * lhs[0], lhs[1]];
-  }
-
-  if (Array.isArray(rhsNum)) {
-    if (isBigRational(rhsNum))
-      return [rhsNum[0] * bigint(lhs[0]), rhsNum[1] * bigint(lhs[1])];
-    else if (isMachineRational(lhs))
-      return [lhs[0] * rhsNum[0], lhs[1] * rhsNum[1]];
-
-    return [lhs[0] * bigint(rhsNum[0]), lhs[1] * bigint(rhsNum[1])];
-  }
-
-  // If we've reached this point, rhsNum is a Complex
-  debugger;
-  return lhs;
-}
-
-export function div(lhs: Rational, rhs: Rational): Rational {
-  return mul(lhs, inverse(rhs));
 }
 
 export function pow(r: Rational, exp: number): Rational {
@@ -197,9 +79,10 @@ export function pow(r: Rational, exp: number): Rational {
   }
   if (exp === 1) return r;
 
-  if (isMachineRational(r)) return [Math.pow(r[0], exp), Math.pow(r[1], exp)];
-  const bigexp = bigint(exp);
-  return [r[0] ** bigexp, r[1] ** bigexp];
+  // Always use bigint to calculate powers. Avoids underflow/overflow.
+
+  const bigexp = BigInt(exp);
+  return [BigInt(r[0]) ** bigexp, BigInt(r[1]) ** bigexp];
 }
 
 export function sqrt(r: Rational): Rational | undefined {
@@ -210,9 +93,12 @@ export function sqrt(r: Rational): Rational | undefined {
   return undefined;
 }
 
-// export function rationalGcd(lhs: Rational, rhs: Rational): Rational {
-//   return [gcd(lhs[0] * rhs[1], lhs[1] * rhs[0]), lhs[1] * rhs[1]] as Rational;
-// }
+export function rationalGcd(lhs: Rational, rhs: Rational): Rational {
+  return [
+    bigGcd(BigInt(lhs[0]), BigInt(rhs[1])),
+    bigGcd(BigInt(lhs[1]), BigInt(rhs[0])),
+  ] as Rational;
+}
 
 // export function rationalLcm(
 //   [a, b]: [number, number],
@@ -282,23 +168,20 @@ export function rationalize(x: number): [n: number, d: number] | number {
   return [h, k];
 }
 
-/** Return [factor, root] such that factor * sqrt(root) = n
+/** Return [factor, root] such that factor * sqrt(root) = sqrt(n)
  * when factor and root are rationals
  */
 export function reduceRationalSquareRoot(
   n: Rational
-): [factor: Rational, root: Rational] {
+): [factor: Rational, root: number | bigint] {
   if (isBigRational(n)) {
     const [num, den] = n;
     const [nFactor, nRoot] = bigFactorPower(num, 2);
     const [dFactor, dRoot] = bigFactorPower(den, 2);
-    return [
-      reducedRational([nFactor, dFactor]),
-      reducedRational([nRoot, dRoot]),
-    ];
+    return [reducedRational([nFactor, dFactor * dRoot]), nRoot * dRoot];
   }
   const [num, den] = n;
   const [nFactor, nRoot] = factorPower(num, 2);
   const [dFactor, dRoot] = factorPower(den, 2);
-  return [reducedRational([nFactor, dFactor]), reducedRational([nRoot, dRoot])];
+  return [reducedRational([nFactor, dFactor * dRoot]), nRoot * dRoot];
 }

@@ -1,4 +1,8 @@
-import { parse } from '../../utils';
+import { engine as ce } from '../../utils';
+
+function parse(s: string) {
+  return ce.parse(s);
+}
 
 describe('STEFNOTCH #9', () => {
   test('\\int_{\\placeholder{⬚}}^{\\placeholder{⬚}}3x', () => {
@@ -57,7 +61,7 @@ describe('STEFNOTCH #10', () => {
 
   test('7/ \\lim_{n\\to\\infty}3', () => {
     expect(parse('\\lim_{n\\to\\infty}3')).toMatchInlineSnapshot(
-      `["Limit", ["Function", 3, "n"], {num: "+Infinity"}]`
+      `["Limit", ["Function", 3, "n"], "PositiveInfinity"]`
     );
   });
 
@@ -77,7 +81,7 @@ describe('STEFNOTCH #12', () => {
         [
           "Error",
           ["ErrorCode", "'incompatible-domain'", "Numbers", "Tuples"],
-          ["Triple", "ImaginaryUnit", "Pi", "'nope!?\\lparensum'"]
+          ["Tuple", "ImaginaryUnit", "Pi", "'nope!?\\lparensum'"]
         ]
       ]
     `);
@@ -102,25 +106,9 @@ describe('STEFNOTCH #13', () => {
   });
 
   test('2/ x_{1,2}=1,2', () => {
-    expect(parse('x_{1,2}=1,2')).toMatchInlineSnapshot(`
-      [
-        "Delimiter",
-        [
-          "Sequence",
-          [
-            "Equal",
-            [
-              "Error",
-              "'expected-pure-expression'",
-              ["Subscript", "x", ["Delimiter", ["Sequence", 1, 2], "','"]]
-            ],
-            1
-          ],
-          2
-        ],
-        "','"
-      ]
-    `);
+    expect(parse('x_{1,2}=1,2')).toMatchInlineSnapshot(
+      `["Pair", ["Equal", ["At", "x", 1, 2], 1], 2]`
+    );
   }); // @fixme unclear what the right answer is
 
   test('3/  \\{1,2\\}', () => {
@@ -128,9 +116,7 @@ describe('STEFNOTCH #13', () => {
   });
 
   test('4/ \\[1,2\\]', () => {
-    expect(parse('[1,2]')).toMatchInlineSnapshot(
-      `["Error", ["ErrorCode", "'unexpected-token'", "'['"]]`
-    );
+    expect(parse('[1,2]')).toMatchInlineSnapshot(`["List", 1, 2]`);
   });
 
   test('5/ \\frac{2}{\\sqrt{n}}\\Leftrightarrow n>\\frac{5}{n^2}', () => {
@@ -149,11 +135,22 @@ describe('STEFNOTCH #13', () => {
       .toMatchInlineSnapshot(`
       [
         "Implies",
-        ["LessEqual", ["Abs", "a_n"], ["Divide", 2, ["Sqrt", "n"]]],
         [
-          "Equal",
-          ["Error", "'expected-pure-expression'", ["To", "a_n", 0]],
-          0
+          "LessEqual",
+          [
+            "Abs",
+            [
+              "Error",
+              ["ErrorCode", "'incompatible-domain'", "Numbers", "Anything"],
+              ["At", "a", "n"]
+            ]
+          ],
+          ["Divide", 2, ["Sqrt", "n"]]
+        ],
+        [
+          "Error",
+          ["ErrorCode", "'incompatible-domain'", "Booleans", "Anything"],
+          ["At", "a", ["Equal", ["To", "n", 0], 0]]
         ]
       ]
     `);
@@ -179,8 +176,19 @@ describe('STEFNOTCH #13', () => {
             "'expected-closing-delimiter'",
             ["LatexString", "'{\\displaystyle\\lim_{n\\to\\infty}'"]
           ],
-          "a_n",
-          ["Error", "'unexpected-closing-delimiter'", ["LatexString", "'}'"]]
+          [
+            "At",
+            "a",
+            [
+              "InvisibleOperator",
+              "n",
+              [
+                "Error",
+                "'unexpected-closing-delimiter'",
+                ["LatexString", "'}'"]
+              ]
+            ]
+          ]
         ]
       ]
     `);
@@ -208,14 +216,21 @@ describe('STEFNOTCH #13', () => {
           "ForAll",
           "n",
           [
-            "Implies",
+            "At",
+            "a",
             [
               "LessEqual",
-              ["Subscript", "a", "n"],
-              ["Subscript", "c", "n"],
-              ["Subscript", "b", "n"]
-            ],
-            ["Error", "'missing'"]
+              "n",
+              [
+                "At",
+                "c",
+                [
+                  "LessEqual",
+                  "n",
+                  ["At", "b", ["Implies", "n", ["Error", "'missing'"]]]
+                ]
+              ]
+            ]
           ]
         ],
         [

@@ -199,17 +199,9 @@ check('Invalid postfix operator', () =>
 );
 
 check('Supsub syntax error', () =>
-  expect(engine.parse('x__+1')).toMatchInlineSnapshot(`
-    [
-      "Add",
-      [
-        "Subscript",
-        "x",
-        ["Error", "'syntax-error'", ["LatexString", "'_'"]]
-      ],
-      1
-    ]
-  `)
+  expect(engine.parse('x__+1')).toMatchInlineSnapshot(
+    `["At", "x", ["Add", "_", 1]]`
+  )
 );
 
 check('Supsub syntax error', () =>
@@ -219,9 +211,9 @@ check('Supsub syntax error', () =>
       [
         "Sqrt",
         [
-          "Subscript",
-          "x",
-          ["Error", "'syntax-error'", ["LatexString", "'_'"]]
+          "Error",
+          ["ErrorCode", "'incompatible-domain'", "Numbers", "Anything"],
+          ["At", "x", "_"]
         ]
       ],
       1
@@ -238,10 +230,10 @@ check('Supsub syntax error', () =>
 check('Supsub syntax error', () =>
   expect(engine.parse('x_{a')).toMatchInlineSnapshot(`
     [
-      "Subscript",
+      "At",
       "x",
       [
-        "InvisibleOperator",
+        "Tuple",
         "a",
         ["Error", "'expected-closing-delimiter'", ["LatexString", "'{a'"]]
       ]
@@ -298,18 +290,18 @@ check('VALID function application', () =>
 );
 
 // This is valid, because Multiply is threaded, and can accept an empty
-// tupple as an argument.
+// tuple as an argument.
 check('VALID empty delimiter expression', () =>
   expect(engine.parse('1()')).toMatchInlineSnapshot(
-    `["Multiply", 1, "Nothing"]`
+    `["Multiply", 1, ["Tuple"]]`
   )
 );
 
-check('Invalid empty delimiter expression', () =>
+check('VALID empty delimiter expression', () =>
   expect(engine.parse('1\\left(\\right)')).toMatchInlineSnapshot(
-    `["Multiply", 1, "Nothing"]`
+    `["Multiply", 1, ["Tuple"]]`
   )
-); // @fixme
+);
 
 check('Invalid delimiter: expected closing', () =>
   expect(engine.parse('1\\left(')).toMatchInlineSnapshot(`
@@ -432,7 +424,7 @@ check('Syntax error: \\1', () =>
 );
 
 check('Syntax error: ##', () =>
-  expect(engine.parse('x##')).toMatchInlineSnapshot(`["Multiply", "x", "##"]`)
+  expect(engine.parse('x##')).toMatchInlineSnapshot(`["Multiply", "##", "x"]`)
 );
 
 check('Syntax error: &', () =>

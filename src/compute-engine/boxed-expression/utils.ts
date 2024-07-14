@@ -1,8 +1,11 @@
 import { Decimal } from 'decimal.js';
+
 import { Expression } from '../../math-json/math-json-format';
 import { isNumberExpression, isNumberObject } from '../../math-json/utils';
 import { bigint } from '../numerics/numeric-bigint';
-import { BoxedExpression, IComputeEngine } from '../public';
+import { joinLatex } from '../latex-syntax/tokenizer';
+import { DEFINITIONS_INEQUALITIES } from '../latex-syntax/dictionary/definitions-relational-operators';
+import { BoxedExpression, IComputeEngine } from './public';
 
 export function isBoxedExpression(x: unknown): x is BoxedExpression {
   return typeof x === 'object' && x !== null && 'engine' in x;
@@ -12,7 +15,7 @@ export function isBoxedExpression(x: unknown): x is BoxedExpression {
  * For any numeric result, if `bignumPreferred()` is true, calculate using
  * bignums. If `bignumPreferred()` is false, calculate using machine numbers
  */
-export function bignumPreferred(ce: IComputeEngine) {
+export function bignumPreferred(ce: IComputeEngine): boolean {
   return ce.numericMode === 'bignum' || ce.numericMode === 'auto';
 }
 
@@ -20,7 +23,7 @@ export function bignumPreferred(ce: IComputeEngine) {
  * return `NaN` if not `complexallowed()`
  */
 
-export function complexAllowed(ce: IComputeEngine) {
+export function complexAllowed(ce: IComputeEngine): boolean {
   return ce.numericMode === 'auto' || ce.numericMode === 'complex';
 }
 
@@ -30,11 +33,17 @@ export function isLatexString(s: unknown): s is string {
 }
 
 export function asLatexString(s: unknown): string | null {
-  if (typeof s !== 'string') return null;
+  if (typeof s === 'number') return s.toString();
+  if (typeof s === 'string') {
+    const str = s.trim();
 
-  if (s.startsWith('$$') && s.endsWith('$$')) return s.slice(2, -2);
-  if (s.startsWith('$') && s.endsWith('$')) return s.slice(1, -1);
-
+    if (str.startsWith('$$') && str.endsWith('$$')) return str.slice(2, -2);
+    if (str.startsWith('$') && str.endsWith('$')) return str.slice(1, -1);
+  }
+  if (Array.isArray(s)) {
+    // Check after 'string', since a string is also an array...
+    return asLatexString(joinLatex(s));
+  }
   return null;
 }
 
@@ -97,6 +106,25 @@ export function asBigint(expr: BoxedExpression): bigint | null {
   return null;
 }
 
+export function normalizedUnknownsForSolve(
+  syms:
+    | string
+    | Iterable<string>
+    | BoxedExpression
+    | Iterable<BoxedExpression>
+    | null
+    | undefined
+): string[] {
+  if (syms === null || syms === undefined) return [];
+  if (typeof syms === 'string') return [syms];
+  if (isBoxedExpression(syms)) return normalizedUnknownsForSolve(syms.symbol);
+  if (typeof syms[Symbol.iterator] === 'function')
+    return Array.from(syms as Iterable<any>).map((s) =>
+      typeof s === 'string' ? s : s.symbol
+    );
+  return [];
+}
+
 /** Return the local variables in the expression.
  *
  * A local variable is an identifier that is declared with a `Declare`
@@ -120,3 +148,14 @@ export function asBigint(expr: BoxedExpression): bigint | null {
 //       if (id) result.add(id);
 //     }
 // }
+
+export function isRelationalOperator(name: BoxedExpression | string): boolean {
+  if (typeof name !== 'string') return false;
+  return DEFINITIONS_INEQUALITIES.some((x) => x.name === name);
+}
+
+export function isInequality(expr: BoxedExpression): boolean {
+  const h = expr.head;
+  if (typeof h !== 'string') return false;
+  return ['Equal', 'Less', 'LessEqual', 'Greater', 'GreaterEqual'].includes(h);
+}

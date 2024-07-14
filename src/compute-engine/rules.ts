@@ -7,6 +7,8 @@ import {
   ReplaceOptions,
   BoxedSubstitution,
   PatternConditionFunction,
+  SemiBoxedExpression,
+  PatternReplaceFunction,
 } from './public';
 import { asLatexString } from './boxed-expression/utils';
 
@@ -25,7 +27,7 @@ export function matchRules(
     const r = applyRule(rule, expr, sub);
     if (r === null) continue;
     // Verify that the results are unique
-    if (results.some((x) => x.isEqual(r))) continue;
+    if (results.some((x) => x.isSame(r))) continue;
     results.push(r);
   }
 
@@ -52,43 +54,76 @@ export function matchRules(
  * @returns
  */
 export function boxRules(ce: IComputeEngine, rs: Iterable<Rule>): BoxedRuleSet {
-  const result = new Set<BoxedRule>();
+  const result: BoxedRule[] = [];
 
-  for (const { match, replace, condition, priority, id } of rs) {
-    // Normalize the condition to a function
-    let condFn: undefined | PatternConditionFunction;
-    if (typeof condition === 'string') {
-      const latex = asLatexString(condition);
-      if (latex) {
-        // Substitute any unbound vars in the condition to a wildcard
-        const condPattern = ce.parse(latex, { canonical: false });
-        condFn = (x: BoxedSubstitution, _ce: IComputeEngine): boolean =>
-          condPattern.subs(x).evaluate()?.symbol === 'True';
-      }
-    } else condFn = condition;
+  for (const rule of rs) result.push(normalizeRule(ce, rule));
 
-    result.add({
-      match: ce.box(match, { canonical: false }),
-      replace:
-        typeof replace === 'function'
-          ? replace
-          : ce.box(replace, { canonical: false }),
-      priority: priority ?? 0,
-      condition: condFn,
-      id:
-        id ??
-        ce.box(match, { canonical: false }).toString() +
-          (typeof replace === 'function'
-            ? '  ->  function'
-            : '  ->  ' + ce.box(replace, { canonical: false }).toString()),
-    });
+  return result.sort((a, b) => b.priority - a.priority);
+}
+
+function normalizeLatexRule(
+  ce: IComputeEngine,
+  rule?: string | SemiBoxedExpression | PatternReplaceFunction
+): BoxedExpression | undefined {
+  if (rule === undefined || typeof rule === 'function') return undefined;
+  if (typeof rule === 'string') {
+    let expr = ce.parse(rule, { canonical: false });
+    expr = expr.map(
+      (x) => {
+        // Only transform single character symbols. Avoid \pi, \imaginaryUnit, etc..
+        if (x.symbol && x.symbol.length === 1) return ce.symbol('_' + x.symbol);
+        return x;
+      },
+      { canonical: false }
+    );
+    return expr;
   }
-  return result;
+  return ce.box(rule, { canonical: false });
+}
+
+function normalizeStringRule(ce: IComputeEngine, rule: string): BoxedRule {
+  const [lhs, rhs] = rule.split(/->|\\to/).map((x) => x.trim());
+  return normalizeRule(ce, {
+    match: normalizeLatexRule(ce, lhs),
+    replace: normalizeLatexRule(ce, rhs)!,
+    priority: 0,
+    condition: undefined,
+    id: lhs + ' -> ' + rhs,
+  });
+}
+
+function normalizeRule(ce: IComputeEngine, rule: Rule): BoxedRule {
+  if (typeof rule === 'string') return normalizeStringRule(ce, rule);
+
+  const { match, replace, condition, priority, id } = rule;
+
+  // Normalize the condition to a function
+  let condFn: undefined | PatternConditionFunction;
+  if (typeof condition === 'string') {
+    const latex = asLatexString(condition);
+    if (latex) {
+      // Substitute any unbound vars in the condition to a wildcard
+      const condPattern = ce.parse(latex, { canonical: false });
+      condFn = (x: BoxedSubstitution, _ce: IComputeEngine): boolean =>
+        condPattern.subs(x).evaluate()?.symbol === 'True';
+    }
+  } else condFn = condition;
+
+  const matchExpr = normalizeLatexRule(ce, match);
+  const replaceExpr = normalizeLatexRule(ce, replace);
+  return {
+    match: matchExpr,
+    replace: replaceExpr ?? (replace as PatternReplaceFunction),
+    priority: priority ?? 0,
+    condition: condFn,
+    exact: rule.exact ?? true,
+    id: id ?? (matchExpr?.latex ?? '') + ' -> ' + replaceExpr?.latex ?? '',
+  };
 }
 
 /**
  * Apply a rule to an expression, assuming an incoming substitution
- * @param param0 the rule to apply
+ * @param rule the rule to apply
  * @param expr the expression to apply the rule to
  * @param substitution an incoming substitution
  * @param options
@@ -100,7 +135,6 @@ function applyRule(
   substitution: BoxedSubstitution,
   options?: ReplaceOptions
 ): BoxedExpression | null {
-  // console.info('applyRule', id);
   const { match, replace, condition, id } = rule;
 
   let changed = false;
@@ -116,7 +150,10 @@ function applyRule(
     if (changed) expr = ce.function(expr.head, newOps, { canonical: false });
   }
 
-  const sub = expr.match(match, { substitution, ...options });
+  const exact = rule.exact ?? true;
+  const sub = match
+    ? expr.match(match, { substitution, ...options, exact })
+    : {};
 
   // If the `expr` does not match the pattern, the rule doesn't apply
   if (sub === null) return changed ? expr : null;
@@ -125,6 +162,7 @@ function applyRule(
   if (typeof condition === 'function' && !condition(sub, expr.engine))
     return null;
 
+  // console.trace('apply rule ', id, 'to', expr.toString());
   // @debug
   // if (typeof replace === 'function')
   //   console.info('Applying rule ', match.toString(), '->', 'function');
@@ -146,7 +184,7 @@ function applyRule(
   //     .map((x) => `${x} -> ${sub[x].toString()}`)
   //     .join(', ')
   // );
-  if (typeof replace === 'function') return replace(expr, sub);
+  if (typeof replace === 'function') return replace(expr, sub) ?? null;
   return replace.subs(sub, { canonical: expr.isCanonical });
 }
 
@@ -174,11 +212,20 @@ export function replace(
   try {
     while (!done && iterationCount < iterationLimit) {
       done = true;
+      const appliedRules: string[] = [];
       for (const rule of ruleSet) {
         const result = applyRule(rule, expr, {}, options);
         if (result !== null && result !== expr) {
           // If once flag is set, bail on first matching rule
           if (once) return result;
+          // If the rule has already been applied, skip it
+          if (appliedRules.includes(rule.id)) {
+            console.error(
+              'Rule cycle detected',
+              appliedRules.reduce((a, b) => a + ' -> ' + b, '')
+            );
+          }
+          appliedRules.push(rule.id);
           done = false;
           atLeastOneRule = true;
           expr = result;

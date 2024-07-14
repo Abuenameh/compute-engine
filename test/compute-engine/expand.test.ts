@@ -20,9 +20,8 @@ describe('EXPAND POWER', () => {
       ]
     `));
 
+  // 64*a**6 + 768*a**5*b**2 + 3840*a**4*b**4 + 10240*a**3*b**6 + 15360*a**2*b**8 + 12288*a*b**10 + 4096*b**12
   test(`Power`, () =>
-    // 64*a**6 + 768*a**5*b**2 + 3840*a**4*b**4 + 10240*a**3*b**6 + 15360*a**2*b**8 + 12288*a*b**10 + 4096*b**12
-
     expect(checkExpand(`(2a+4b^2)^6`)).toMatchInlineSnapshot(`
       box       = [
         "Expand",
@@ -46,27 +45,27 @@ describe('EXPAND POWER', () => {
 });
 
 describe('EXPAND PRODUCT', () => {
-  test(`Product`, () =>
+  test(`Expand x(x+2)`, () =>
     expect(checkExpand(`4x(x+2)`)).toMatchInlineSnapshot(`
       box       = ["Expand", ["Multiply", 4, "x", ["Add", "x", 2]]]
       evaluate  = ["Add", ["Multiply", 4, ["Square", "x"]], ["Multiply", 8, "x"]]
     `));
-  test(`Product`, () =>
+  test(`Expand 4x(3x+2)-5(5x-4)`, () =>
     expect(checkExpand(`4x(3x+2)-5(5x-4)`)).toMatchInlineSnapshot(`
       box       = [
         "Expand",
         [
-          "Subtract",
-          ["Multiply", 4, "x", ["Add", ["Multiply", 3, "x"], 2]],
-          ["Multiply", 5, ["Subtract", ["Multiply", 5, "x"], 4]]
+          "Add",
+          ["Multiply", -5, ["Subtract", ["Multiply", 5, "x"], 4]],
+          ["Multiply", 4, "x", ["Add", ["Multiply", 3, "x"], 2]]
         ]
       ]
       simplify  = [
         "Expand",
         [
           "Add",
-          ["Multiply", 12, ["Square", "x"]],
-          ["Multiply", -17, "x"],
+          ["Multiply", -25, "x"],
+          ["Multiply", 4, "x", ["Add", ["Multiply", 3, "x"], 2]],
           20
         ]
       ]

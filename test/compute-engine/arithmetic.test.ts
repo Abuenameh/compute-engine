@@ -1,6 +1,5 @@
 import { check, checkJson, engine } from '../utils';
 
-engine.jsonSerializationOptions = { precision: 20 };
 const ce = engine;
 
 describe('CONSTANTS', () => {
@@ -89,6 +88,27 @@ describe('EXACT EVALUATION', () => {
     expect(
       check('1.1+2+5+\\frac{5}{7}+\\frac{7}{9}+\\sqrt{2}+\\pi')
     ).toMatchSnapshot());
+
+  // 0.1 + 2 + 1/4 -> 2.35
+  test(`Inexact values propagate`, () =>
+    expect(check('0.1 + 2 + \\frac{1}{4}')).toMatchSnapshot());
+
+  // Exact values are grouped together
+  // Square rationals are preserved, not reduced
+  test(`Exact values are grouped together`, () =>
+    expect(
+      check('2 + \\frac{1}{4} + \\frac{1}{4} + \\sqrt{5} + \\sqrt{7}')
+    ).toMatchSnapshot());
+
+  // If inexact values are canceled, exact values are grouped together
+  test(`Canceled inexact values are ignored`, () =>
+    expect(
+      check('2.12 - 2.12 + \\frac{1}{4} + \\frac{1}{4} + \\sqrt{5} + \\sqrt{7}')
+    ).toMatchSnapshot());
+
+  // √5 + √5 = 2√5
+  test(`Square rationals are grouped together`, () =>
+    expect(check('\\sqrt{5} + \\sqrt{5}')).toMatchSnapshot());
 });
 
 describe('ADD', () => {
@@ -136,11 +156,20 @@ describe('ADD', () => {
 });
 
 describe('SUBTRACT', () => {
+  test(`Subtract rational and float`, () =>
+    expect(
+      ce
+        .box(['Subtract', ['Multiply', 0.5, 'x'], ['Divide', 'x', 2]])
+        .evaluate()
+    ).toMatchInlineSnapshot(`0`));
+
   test(`Subtract`, () =>
     expect(ce.box(['Subtract', 2.5]).evaluate()).toMatchSnapshot());
   test(`Subtract`, () =>
     expect(ce.box(['Subtract', 2.5, 1.1]).evaluate()).toMatchSnapshot());
-  test(`INVALID Subtract`, () =>
+  test(`Subtract with single argument`, () =>
+    expect(ce.box(['Subtract', 2.5]).evaluate()).toMatchSnapshot());
+  test(`Subtract with multiple arguments`, () =>
     expect(ce.box(['Subtract', 2.5, -1.1, 18.4]).evaluate()).toMatchSnapshot());
 });
 
@@ -211,8 +240,10 @@ describe('MULTIPLY', () => {
 
   test(`with zero`, () =>
     expect(checkJson(['Multiply', 'x', 2, 3.1, 0])).toMatchSnapshot());
+
   test(`with NaN`, () =>
     expect(checkJson(['Multiply', 'x', 2, 3.1, 'NaN'])).toMatchSnapshot());
+
   test(`with <0`, () =>
     expect(checkJson(['Multiply', 'x', -2, 3.1, -5.2])).toMatchSnapshot());
 
@@ -223,7 +254,14 @@ describe('MULTIPLY', () => {
 
   test(`with -Infinity`, () =>
     expect(
-      checkJson(['Multiply', 'x', -2, 3.1, { num: '-Infinity' }])
+      checkJson([
+        'Multiply',
+        'x',
+        -2,
+        3.1,
+        'NegativeInfinity',
+        { num: '-Infinity' },
+      ])
     ).toMatchSnapshot());
 
   test(`with -Infinity and +Infinity`, () =>
@@ -233,6 +271,20 @@ describe('MULTIPLY', () => {
         'x',
         -2,
         3.1,
+        'PositiveInfinity',
+        { num: '-Infinity' },
+        { num: '+Infinity' },
+      ])
+    ).toMatchSnapshot());
+
+  test(`with Nan, -Infinity and +Infinity`, () =>
+    expect(
+      checkJson([
+        'Multiply',
+        'x',
+        -2,
+        3.1,
+        'NaN',
         { num: '-Infinity' },
         { num: '+Infinity' },
       ])
@@ -308,9 +360,9 @@ describe('DIVIDE', () => {
     expect(ce.box(['Divide', 6, 3]).evaluate()).toMatchSnapshot());
   test(`Divide 2.5/1.1`, () =>
     expect(ce.box(['Divide', 2.5, 1.1]).evaluate()).toMatchSnapshot());
-  test(`INVALID  Divide`, () =>
+  test(`Divide with single argument`, () =>
     expect(ce.box(['Divide', 2.5]).evaluate()).toMatchSnapshot());
-  test(`INVALID Divide`, () =>
+  test(`Divide with many arguments`, () =>
     expect(ce.box(['Divide', 2.5, -1.1, 18.4]).evaluate()).toMatchSnapshot());
 });
 
@@ -473,14 +525,14 @@ describe('Max', () => {
 
   test('Max of a set', () => {
     expect(ce.box(['Max', ['Set', 4, 1, 56, 18]]).value).toMatchInlineSnapshot(
-      `["Max",["Set",4,1,56,18]]`
+      `56`
     );
   });
 
   test('Max of a list with non-comparable', () => {
     expect(
       ce.box(['Max', ['List', 4, 1, 'bar', 56, 'foo', 18]]).value
-    ).toMatchInlineSnapshot(`["Max",56,"bar","foo"]`);
+    ).toMatchInlineSnapshot(`max(56, "bar", "foo")`);
   });
 });
 
@@ -577,17 +629,7 @@ describe('EXP', () => {
   expect(checkJson(['Exp', -1])).toMatchSnapshot();
   expect(checkJson(['Exp', 'Pi'])).toMatchSnapshot();
   expect(checkJson(['Exp', ['Complex', 1.1, 1.1]])).toMatchSnapshot();
-  expect(checkJson(['Exp', ['List', 1.1, 2, 4]])).toMatchInlineSnapshot(`
-    box       = ["Exp", ["List", 1.1, 2, 4]]
-    evaluate  = ["List", ["Exp", 1.1], ["Exp", 2], ["Exp", 4]]
-    N-auto    = [
-      "List",
-      "3.0041660239464331121",
-      "7.3890560989306502272",
-      "54.598150033144239078"
-    ]
-    N-mach    = ["List", 3.004166023946433, 7.3890560989306495, 54.59815003314423]
-  `);
+  expect(checkJson(['Exp', ['List', 1.1, 2, 4]])).toMatchSnapshot();
 });
 
 describe('SUM', () => {
@@ -597,7 +639,7 @@ describe('SUM', () => {
         .box(['Sum', ['Divide', 1, 'x'], ['Tuple', ['Hold', 'x'], 1, 10]])
         .evaluate()
         .toString()
-    ).toMatchInlineSnapshot(`(7381/2520)`));
+    ).toMatchInlineSnapshot(`7381/2520`));
 
   it('should compute the sum of a function over an open interval', () =>
     expect(
@@ -605,7 +647,9 @@ describe('SUM', () => {
         .box(['Sum', ['Divide', 1, 'x'], 'x'])
         .evaluate()
         .toString()
-    ).toMatchInlineSnapshot(`14.3927277228647235281448`));
+    ).toMatchInlineSnapshot(
+      `14.39272772286472363238112649318958767564480101374331165441843204581395850651799600356729817694721969`
+    ));
 
   it('should compute the sum of a collection', () =>
     expect(
@@ -640,12 +684,12 @@ describe('GCD/LCM', () => {
   it('should compute the GCD of some integers and other stuff', () =>
     expect(
       ce.box(['GCD', 60, 'foo', 12]).evaluate().toString()
-    ).toMatchInlineSnapshot(`GCD(12, foo)`));
+    ).toMatchInlineSnapshot(`gcd(12, "foo")`));
 
   it('should compute the GCD of only stuff', () =>
     expect(
       ce.box(['GCD', 'foo', 'bar']).evaluate().toString()
-    ).toMatchInlineSnapshot(`GCD(foo, bar)`));
+    ).toMatchInlineSnapshot(`gcd("foo", "bar")`));
 
   it('should compute the GCD of a single number', () =>
     expect(ce.box(['GCD', 42]).evaluate().toString()).toMatchInlineSnapshot(
@@ -655,7 +699,7 @@ describe('GCD/LCM', () => {
   it('should compute the GCD of some numbers', () =>
     expect(
       ce.box(['GCD', 60, 12, 3.1415]).evaluate().toString()
-    ).toMatchInlineSnapshot(`GCD(12, 3.1415)`));
+    ).toMatchInlineSnapshot(`gcd(12, 3.1415)`));
 
   it('should compute the GCD of a list', () =>
     expect(
@@ -663,17 +707,17 @@ describe('GCD/LCM', () => {
         .box(['GCD', ['List', 60, 12, 3.1415]])
         .evaluate()
         .toString()
-    ).toMatchInlineSnapshot(`GCD([60,12,3.1415])`));
+    ).toMatchInlineSnapshot(`gcd([60,12,3.1415])`));
 
   it('should compute the LCM of some integers and other stuff', () =>
     expect(
       ce.box(['LCM', 60, 'foo', 12]).evaluate().toString()
-    ).toMatchInlineSnapshot(`LCM(60, foo)`));
+    ).toMatchInlineSnapshot(`lcm(60, "foo")`));
 
   it('should compute the LCM of only stuff', () =>
     expect(
       ce.box(['LCM', 'foo', 'bar']).evaluate().toString()
-    ).toMatchInlineSnapshot(`LCM(foo, bar)`));
+    ).toMatchInlineSnapshot(`lcm("foo", "bar")`));
 
   it('should compute the LCM of a single number', () =>
     expect(ce.box(['LCM', 42]).evaluate().toString()).toMatchInlineSnapshot(
@@ -683,7 +727,7 @@ describe('GCD/LCM', () => {
   it('should compute the LCM of some numbers', () =>
     expect(
       ce.box(['LCM', 60, 12, 3.1415]).evaluate().toString()
-    ).toMatchInlineSnapshot(`LCM(60, 3.1415)`));
+    ).toMatchInlineSnapshot(`lcm(60, 3.1415)`));
 
   it('should compute the LCM of a list', () =>
     expect(
@@ -691,7 +735,7 @@ describe('GCD/LCM', () => {
         .box(['LCM', ['List', 60, 12, 3.1415]])
         .evaluate()
         .toString()
-    ).toMatchInlineSnapshot(`LCM([60,12,3.1415])`));
+    ).toMatchInlineSnapshot(`lcm([60,12,3.1415])`));
 });
 
 describe('FACTOR', () => {
@@ -701,7 +745,7 @@ describe('FACTOR', () => {
         .box(['Factor', ce.parse('\\sqrt{7}\\sqrt{35}x^2 \\lt \\sqrt{5}x')])
         .evaluate()
         .toString()
-    ).toMatchInlineSnapshot(`Less(Multiply(7, x), 1)`));
+    ).toMatchInlineSnapshot(`7x < 1`));
 
   it('should factor integers', () =>
     expect(
@@ -709,7 +753,7 @@ describe('FACTOR', () => {
         .box(['Factor', ce.parse('2a \\lt 4b')])
         .evaluate()
         .toString()
-    ).toMatchInlineSnapshot(`Less(a, Multiply(2, b))`));
+    ).toMatchInlineSnapshot(`a < 2b`));
 
   it('should factor additions', () =>
     expect(
@@ -717,5 +761,5 @@ describe('FACTOR', () => {
         .box(['Factor', ce.parse('\\sqrt{3}x+2\\sqrt{3}x')])
         .evaluate()
         .toString()
-    ).toMatchInlineSnapshot(`Multiply(x, 3, Sqrt(3))`));
+    ).toMatchInlineSnapshot(`3sqrt(3) * x`));
 });

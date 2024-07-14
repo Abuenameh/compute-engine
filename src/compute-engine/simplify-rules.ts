@@ -26,7 +26,135 @@ import { Rule } from './public';
  * used. Therefore in some cases using Expression, while more verbose,
  * may be necessary as the expression could be simplified by the canonicalization.
  */
-export const SIMPLIFY_RULES: Rule[] = [];
+export const SIMPLIFY_RULES: Rule[] = [
+  '\\frac{x}{x} -> 1', // Note this is not true for x = 0
+
+  '\\frac{x^n}{x^m} -> x^{n-m}', // Note this is not always true
+  'x^n * x^m -> x^{n+m}',
+  'x^a * x^b -> x^{a+b}',
+  'x^n^m -> x^{n * m}',
+
+  // Exponential and logarithms
+  '\\log(xy) -> \\log(x) + \\log(y)',
+  '\\log(x^n) -> n \\log(x)',
+  '\\log(\\frac{x}{y}) -> \\log(x) - \\log(y)',
+  '\\log(\\exp(x) * y) -> x + \\log(y)',
+  '\\log(\\exp(x) / y) -> x - \\log(y)',
+  '\\log(\\exp(x)^y) -> y * x',
+  '\\log(\\exp(x)) -> x',
+
+  '\\exp(x) * \\exp(y) -> \\exp(x + y)',
+  '\\exp(x)^n -> \\exp(n x)',
+  '\\exp(\\log(x)) -> x',
+  '\\exp(\\log(x) + y) -> x * \\exp(y)',
+  '\\exp(\\log(x) - y) -> x / \\exp(y)',
+  '\\exp(\\log(x) * y) -> x^y',
+  '\\exp(\\log(x) / y) -> x^(1/y)',
+  '\\exp(\\log(x) * \\log(y)) -> x^\\log(y)',
+  '\\exp(\\log(x) / \\log(y)) -> x^{1/\\log(y)}',
+
+  // Trigonometric
+  '\\sin(-x) -> -\\sin(x)',
+  '\\cos(-x) -> \\cos(x)',
+  '\\tan(-x) -> -\\tan(x)',
+  '\\cot(-x) -> -\\cot(x)',
+  '\\sec(-x) -> \\sec(x)',
+  '\\csc(-x) -> -\\csc(x)',
+  '\\sin(\\pi - x) -> \\sin(x)',
+  '\\cos(\\pi - x) -> -\\cos(x)',
+  '\\tan(\\pi - x) -> -\\tan(x)',
+  '\\cot(\\pi - x) -> -\\cot(x)',
+  '\\sec(\\pi - x) -> -\\sec(x)',
+  '\\csc(\\pi - x) -> \\csc(x)',
+  '\\sin(\\pi + x) -> -\\sin(x)',
+  '\\cos(\\pi + x) -> -\\cos(x)',
+  '\\tan(\\pi + x) -> \\tan(x)',
+  '\\cot(\\pi + x) -> -\\cot(x)',
+  '\\sec(\\pi + x) -> -\\sec(x)',
+  '\\csc(\\pi + x) -> \\csc(x)',
+
+  '\\sin(\\frac{\\pi}{2} - x) -> \\cos(x)',
+  '\\cos(\\frac{\\pi}{2} - x) -> \\sin(x)',
+  '\\tan(\\frac{\\pi}{2} - x) -> \\cot(x)',
+  '\\cot(\\frac{\\pi}{2} - x) -> \\tan(x)',
+  '\\sec(\\frac{\\pi}{2} - x) -> \\csc(x)',
+  '\\csc(\\frac{\\pi}{2} - x) -> \\sec(x)',
+  '\\sin(x) * \\cos(x) -> \\frac{1}{2} \\sin(2x)',
+  '\\sin(x) * \\sin(y) -> \\frac{1}{2} (\\cos(x-y) - \\cos(x+y))',
+  '\\cos(x) * \\cos(y) -> \\frac{1}{2} (\\cos(x-y) + \\cos(x+y))',
+  '\\tan(x) * \\cot(x) -> 1',
+  // '\\sin(x)^2 + \\cos(x)^2 -> 1',
+  '\\sin(x)^2 -> \\frac{1 - \\cos(2x)}{2}',
+  '\\cos(x)^2 -> \\frac{1 + \\cos(2x)}{2}',
+  {
+    match: ['Tan', '__x'],
+    replace: ['Divide', ['Sin', '__x'], ['Cos', '__x']],
+  },
+  {
+    match: ['Cot', '__x'],
+    replace: ['Divide', ['Cos', '__x'], ['Sin', '__x']],
+  },
+  {
+    match: ['Sec', '__x'],
+    replace: ['Divide', 1, ['Cos', '__x']],
+  },
+  {
+    match: ['Csc', '__x'],
+    replace: ['Divide', 1, ['Sin', '__x']],
+  },
+  // {
+  //   match: ['Cos', '__x'],
+  //   replace: ['Sin', ['Add', ['Divide', 'Pi', 2], '__x']],
+  // },
+  {
+    match: ['Arcosh', '__x'],
+    replace: [
+      'Ln',
+      ['Add', '__x', ['Sqrt', ['Subtract', ['Square', '__x'], 1]]],
+    ],
+    condition: (sub, ce) => sub.__x.isGreater(ce.One) ?? false,
+  },
+  {
+    match: ['Arcsin', '__x'],
+    replace: [
+      'Multiply',
+      2,
+      [
+        'Arctan2',
+        '__x',
+        ['Add', 1, ['Sqrt', ['Subtract', 1, ['Square', '__x']]]],
+      ],
+    ],
+  },
+  {
+    match: ['Arsinh', '__x'],
+    replace: [
+      'Multiply',
+      2,
+      ['Ln', ['Add', '__x', ['Sqrt', ['Add', ['Square', '__x'], 1]]]],
+    ],
+  },
+  {
+    match: ['Artanh', '__x'],
+    replace: [
+      'Multiply',
+      'Half',
+      ['Ln', ['Divide', ['Add', 1, '__x'], ['Subtract', 1, '__x']]],
+    ],
+  },
+  {
+    match: ['Cosh', '__x'],
+    replace: ['Divide', ['Add', ['Exp', '__x'], ['Exp', ['Negate', '__x']]], 2],
+  },
+  {
+    match: ['Sinh', '__x'],
+    replace: [
+      'Divide',
+      ['Subtract', ['Exp', '__x'], ['Exp', ['Negate', '__x']]],
+      2,
+    ],
+  },
+];
 //  [
 //   // `Subtract`
 //   ['$\\_ - \\_$', 0],

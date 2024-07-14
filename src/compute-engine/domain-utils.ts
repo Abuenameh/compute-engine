@@ -1,14 +1,13 @@
-import { Complex } from 'complex.js';
+import Complex from 'complex.js';
 import { Decimal } from 'decimal.js';
-import { isRational } from './numerics/rationals';
-import {
+import { Rational, isRational } from './numerics/rationals';
+import type {
   BoxedDomain,
   BoxedFunctionSignature,
   DomainExpression,
   DomainLiteral,
   FunctionSignature,
   IComputeEngine,
-  Rational,
   SemiBoxedExpression,
 } from './public';
 import { ops, head, nops } from '../math-json/utils';
@@ -168,13 +167,18 @@ export function signatureToDomain(
   ce: IComputeEngine,
   sig: BoxedFunctionSignature
 ): BoxedDomain {
-  const fnParams: SemiBoxedExpression[] = [...sig.params];
-  if (sig.optParams.length > 0) fnParams.push(['OptArg', ...sig.optParams]);
-  if (sig.restParam) fnParams.push(['VarArg', sig.restParam]);
+  try {
+    const fnParams: SemiBoxedExpression[] = [...sig.params];
+    if (sig.optParams.length > 0) fnParams.push(['OptArg', ...sig.optParams]);
+    if (sig.restParam) fnParams.push(['VarArg', sig.restParam]);
 
-  if (typeof sig.result === 'function')
-    fnParams.push(sig.result(ce, []) ?? ce.symbol('Undefined'));
-  else fnParams.push(sig.result);
+    if (typeof sig.result === 'function')
+      fnParams.push(sig.result(ce, []) ?? ce.symbol('Anything'));
+    else fnParams.push(sig.result);
 
-  return ce.domain(['FunctionOf', ...(fnParams as DomainExpression[])]);
+    return ce.domain(['FunctionOf', ...(fnParams as DomainExpression[])]);
+  } catch (e) {
+    console.error('signatureToDomain():', e);
+  }
+  return ce.domain(['FunctionOf', 'Anything', 'Anything']);
 }

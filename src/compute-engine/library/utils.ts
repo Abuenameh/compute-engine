@@ -1,5 +1,6 @@
+import { asMachineInteger } from '../boxed-expression/numerics';
 import { checkDomain } from '../boxed-expression/validate';
-import { MAX_ITERATION, asSmallInteger } from '../numerics/numeric';
+import { MAX_ITERATION } from '../numerics/numeric';
 import { BoxedExpression } from '../public';
 
 /**
@@ -21,11 +22,11 @@ export function MultiIndexingSet(
 ): ReadonlyArray<BoxedExpression> | undefined {
   if (!indexingSet) return undefined;
   const ce = indexingSet.engine;
-  let indexes: BoxedExpression[] = [];
-  let hasSuperSequence = true ? indexingSet.ops?.length == 3 : false;
+  const indexes: BoxedExpression[] = [];
+  const hasSuperSequence = true ? indexingSet.ops?.length == 3 : false;
 
-  let subSequence = indexingSet.ops![0].ops![0].ops;
-  let sequenceLength = subSequence?.length ?? 0;
+  const subSequence = indexingSet.ops![0].ops![0].ops;
+  const sequenceLength = subSequence?.length ?? 0;
   let superSequence: ReadonlyArray<BoxedExpression> | null = null;
   if (hasSuperSequence) {
     superSequence = indexingSet.ops![2].ops![0].ops;
@@ -161,14 +162,14 @@ export function normalizeIndexingSet(
       (limits.op1.head === 'Hold'
         ? limits.op1.op1.symbol
         : limits.op1.symbol) ?? 'Nothing';
-    lower = asSmallInteger(limits.op2) ?? 1;
+    lower = asMachineInteger(limits.op2) ?? 1;
 
     if (!Number.isFinite(lower)) isFinite = false;
 
-    if (limits.op3.isNothing || limits.op3.isInfinity) {
+    if (limits.op3.symbol === 'Nothing' || limits.op3.isInfinity) {
       isFinite = false;
     } else {
-      const u = asSmallInteger(limits.op3);
+      const u = asMachineInteger(limits.op3);
       if (u === null) isFinite = false;
       else {
         upper = u;

@@ -1,9 +1,9 @@
 import { MathJsonIdentifier } from '../math-json/math-json-format';
+import { asFloat } from './boxed-expression/numerics';
+import { isRelationalOperator } from './boxed-expression/utils';
 import { isCollection, isFiniteIndexableCollection } from './collection-utils';
-import { isRelationalOperator } from './latex-syntax/dictionary/definitions-relational-operators';
 import { normalizeIndexingSet } from './library/utils';
 import {
-  asFloat,
   chop,
   factorial,
   gamma,
@@ -11,6 +11,7 @@ import {
   lcm,
   gammaln,
   limit,
+  monteCarloEstimate,
 } from './numerics/numeric';
 import { BoxedExpression } from './public';
 
@@ -28,7 +29,8 @@ export type CompiledFunctions = {
     | string
     | ((
         args: ReadonlyArray<BoxedExpression>,
-        compile: (expr: BoxedExpression) => JSSource
+        compile: (expr: BoxedExpression) => JSSource,
+        target: CompileTarget
       ) => JSSource);
 };
 
@@ -77,6 +79,7 @@ const NATIVE_JS_FUNCTIONS: CompiledFunctions = {
   Gamma: '_SYS.gamma',
   GCD: '_SYS.gcd',
   // Math.hypot
+  Integrate: (args, compile, target) => compileIntegrate(args, compile, target),
   LCM: '_SYS.lcm',
   Limit: (args, compile) =>
     `_SYS.limit(${compile(args[0])}, ${compile(args[1])})`,
@@ -270,21 +273,24 @@ export type CompileTarget = {
  * a custom scope for "global" functions. */
 export class ComputeEngineFunction extends Function {
   private sys = {
+    chop: chop,
     factorial: factorial,
     gamma: gamma,
-    lngamma: gammaln,
     gcd: gcd,
+    integrate: (f, a, b) => monteCarloEstimate(f, a, b, 10e6),
     lcm: lcm,
-    chop: chop,
+    lngamma: gammaln,
     limit: limit,
   };
-  constructor(body) {
+  constructor(body: string) {
     super('_SYS', '_', `return ${body}`);
     return new Proxy(this, {
       apply: (target, thisArg, argumentsList) =>
         super.apply(thisArg, [this.sys, ...argumentsList]),
       get: (target, prop) => {
-        if (prop === 'toString') return () => body;
+        // Expose the `toString` method so that the JavaScript source can be
+        // inspected
+        if (prop === 'toString') return (): string => body;
         return target[prop];
       },
     });
@@ -451,7 +457,7 @@ function compileExpr(
         (expr) => compile(expr, target)
       )})`;
     }
-    return fn(args, (expr) => compile(expr, target));
+    return fn(args, (expr) => compile(expr, target), target);
   }
 
   if (args === null) return `${fn}()`;
@@ -583,4 +589,14 @@ function rndVar(): string {
   // Return a random variable name made up of a single underscore
   // followed by some digits and letters
   return `_${Math.random().toString(36).substring(2)}`;
+}
+
+function compileIntegrate(args, _, target: CompileTarget): string {
+  const [index, lower, upper] = normalizeIndexingSet(args[1]);
+  const f = compile(args[0], {
+    ...target,
+    var: (id) => (id === index ? id : target.var(id)),
+  });
+
+  return `_SYS.integrate((${index}) => (${f}), ${lower}, ${upper})`;
 }

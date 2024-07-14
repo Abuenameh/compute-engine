@@ -6,11 +6,11 @@ import {
   BoxedFunctionDefinition,
   RuntimeScope,
   BoxedFunctionSignature,
-  BoxedExpression,
   Hold,
   BoxedDomain,
 } from '../public';
 import { DEFAULT_COMPLEXITY } from './order';
+import { BoxedExpression } from './public';
 
 export class _BoxedFunctionDefinition implements BoxedFunctionDefinition {
   engine: IComputeEngine;
@@ -274,7 +274,7 @@ export class _BoxedFunctionDefinition implements BoxedFunctionDefinition {
       };
     }
   }
-  reset() {
+  reset(): void {
     return;
   }
 }

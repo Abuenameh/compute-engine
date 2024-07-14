@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js';
-import { primeFactors as machinePrimeFactors } from './numeric';
+import { primeFactors as machinePrimeFactors } from './primes';
 import { Expression } from '../../math-json';
 import { isNumberExpression, isNumberObject } from '../../math-json/utils';
 
@@ -19,9 +19,9 @@ export function bigintValue(
     return Number.isInteger(num) ? BigInt(num) : null;
   if (typeof num !== 'string') return null;
 
-  let s = num
+  const s = num
     .toLowerCase()
-    .replace(/[0-9][nd]$/, '')
+    .replace(/[nd]$/, '')
     .replace(/[\u0009-\u000d\u0020\u00a0]/g, '');
 
   if (s === 'nan') return null;
@@ -161,11 +161,41 @@ export function factorPower(
   const factors = primeFactors(n);
   let f = BigInt(1);
   let r = BigInt(1);
-  const exp = bigint(exponent);
+  const exp = BigInt(exponent);
   for (const [k, v] of factors) {
     const v2 = bigint(v);
     f = f * k ** (v2 / exp);
     r = r * k ** (v2 % exp);
   }
   return [f, r];
+}
+
+/**
+ * Return a, b, c such that n = a * b^c
+ * @param n
+ *
+ */
+export function canonicalInteger(n: bigint): [a: bigint, b: bigint, c: bigint] {
+  if (n === BigInt(0)) return [BigInt(0), BigInt(0), BigInt(1)];
+  let sign = BigInt(1);
+  if (n < 0) {
+    sign = BigInt(-1);
+    n = -n;
+  }
+
+  if (n === BigInt(1)) return [sign, BigInt(1), BigInt(1)];
+
+  const factors = primeFactors(n);
+  let a = BigInt(1);
+  let b = BigInt(1);
+  let c = BigInt(0);
+  for (const [k, v] of factors) {
+    if (v === 1) {
+      a = a * k;
+    } else {
+      b = k;
+      c = BigInt(v);
+    }
+  }
+  return [sign * a, b, c];
 }

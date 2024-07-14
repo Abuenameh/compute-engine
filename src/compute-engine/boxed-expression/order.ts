@@ -1,8 +1,7 @@
-import { Complex } from 'complex.js';
-import { asFloat } from '../numerics/numeric';
-import { BoxedExpression, SemiBoxedExpression } from '../public';
+import Complex from 'complex.js';
 import { lex, maxDegree, totalDegree } from '../symbolic/polynomials';
-import { BoxedFunction } from './boxed-function';
+import { BoxedExpression, SemiBoxedExpression } from './public';
+import { asFloat } from './numerics';
 
 export type Order = 'lex' | 'dexlex' | 'grevlex' | 'elim';
 
@@ -205,14 +204,12 @@ export function canonicalOrder(
     const ce = expr.engine;
     if (expr.head === 'Add') ops = sortAdd(ops);
     else {
-      let isCommutative =
+      const isCommutative =
         expr.head === 'Multiply' ||
         (ce.lookupFunction(expr.head)?.commutative ?? false);
       if (isCommutative) ops = [...ops].sort(order);
     }
-    return new BoxedFunction(expr.engine, expr.head, ops, {
-      canonical: expr.isCanonical,
-    });
+    return ce._fn(expr.head, ops, { canonical: expr.isCanonical });
   }
   return expr;
 }

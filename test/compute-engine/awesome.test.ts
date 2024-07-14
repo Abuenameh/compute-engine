@@ -4,6 +4,94 @@ import { check } from '../utils';
 // Some real math expressions that are awesome...
 //
 
+describe('Primality Test', () => {
+  test('Primality Test', () =>
+    expect(
+      check(
+        '-\\left\\lfloor\\cos\\left(\\pi\\cdot\\frac{\\left( n-1\\right)!+1}{ n}\\right)\\right\\rfloor'
+      )
+    ).toMatchInlineSnapshot(`
+      box       = [
+        "Negate",
+        [
+          "Floor",
+          [
+            "Cos",
+            [
+              "Multiply",
+              "Pi",
+              [
+                "Divide",
+                ["Add", ["Factorial", ["Delimiter", ["Add", "n", -1]]], 1],
+                "n"
+              ]
+            ]
+          ]
+        ]
+      ]
+      canonical = [
+        "Negate",
+        [
+          "Floor",
+          [
+            "Cos",
+            [
+              "Divide",
+              [
+                "Multiply",
+                "Pi",
+                ["Add", ["Factorial", ["Subtract", "n", 1]], 1]
+              ],
+              "n"
+            ]
+          ]
+        ]
+      ]
+      evaluate  = [
+        "Negate",
+        [
+          "Floor",
+          [
+            "Cos",
+            [
+              "Divide",
+              [
+                "Add",
+                ["Multiply", "Pi", ["Factorial", ["Subtract", "n", 1]]],
+                "Pi"
+              ],
+              "n"
+            ]
+          ]
+        ]
+      ]
+      N-auto    = [
+        "Negate",
+        [
+          "Floor",
+          [
+            "Cos",
+            [
+              "Divide",
+              [
+                "Add",
+                [
+                  "Multiply",
+                  3.141592653589793,
+                  ["Factorial", ["Subtract", "n", 1]]
+                ],
+                3.141592653589793
+              ],
+              "n"
+            ]
+          ]
+        ]
+      ]
+    `));
+  // 	https://en.wikipedia.org/wiki/Wilson%27s_theorem
+  // 	https://en.wikipedia.org/wiki/Primality_test#Wilson's_theorem
+});
+
 // C.P. Willans Formula: A function that returns the nth prime number.
 //
 // Not very efficient, but it works
@@ -20,349 +108,27 @@ describe('Nth PRIME NUMBER', () =>
       check(
         'p(n):=(\\sum_{v_{1}=2}^{\\operatorname{floor}\\left(1.5*n*\\ln(n)\\right)}(\\operatorname{floor}(\\frac{1}{0^{n-(\\sum_{v_{2}=2}^{v_{1}}((\\prod_{v_{3}=2}^{\\operatorname{floor}(\\sqrt{v_{2}})}(1-0^{\\operatorname{abs}(\\operatorname{floor}(\\frac{v_{2}}{v_{3}})-\\frac{v_{2}}{v_{3}})}))))}+1})))+2'
       )
-    ).toMatchInlineSnapshot(`
-      latex     = [
-        "Assign",
-        "p",
-        [
-          "Function",
-          [
-            "Add",
-            [
-              "Delimiter",
-              [
-                "Sum",
-                [
-                  "Delimiter",
-                  [
-                    "Floor",
-                    [
-                      "Divide",
-                      1,
-                      [
-                        "Add",
-                        [
-                          "Power",
-                          0,
-                          [
-                            "Subtract",
-                            "n",
-                            [
-                              "Delimiter",
-                              [
-                                "Sum",
-                                [
-                                  "Delimiter",
-                                  [
-                                    "Delimiter",
-                                    [
-                                      "Product",
-                                      [
-                                        "Delimiter",
-                                        [
-                                          "Subtract",
-                                          1,
-                                          [
-                                            "Power",
-                                            0,
-                                            [
-                                              "Abs",
-                                              [
-                                                "Subtract",
-                                                [
-                                                  "Floor",
-                                                  [
-                                                    "Divide",
-                                                    ["Subscript", "v", 2],
-                                                    ["Subscript", "v", 3]
-                                                  ]
-                                                ],
-                                                [
-                                                  "Divide",
-                                                  ["Subscript", "v", 2],
-                                                  ["Subscript", "v", 3]
-                                                ]
-                                              ]
-                                            ]
-                                          ]
-                                        ]
-                                      ],
-                                      [
-                                        "Tuple",
-                                        ["Subscript", "v", 3],
-                                        2,
-                                        [
-                                          "Floor",
-                                          ["Sqrt", ["Subscript", "v", 2]]
-                                        ]
-                                      ]
-                                    ]
-                                  ]
-                                ],
-                                [
-                                  "Tuple",
-                                  ["Subscript", "v", 2],
-                                  2,
-                                  ["Subscript", "v", 1]
-                                ]
-                              ]
-                            ]
-                          ]
-                        ],
-                        1
-                      ]
-                    ]
-                  ]
-                ],
-                [
-                  "Tuple",
-                  ["Subscript", "v", 1],
-                  2,
-                  ["Floor", ["Multiply", 1.5, "n", ["Ln", "n"]]]
-                ]
-              ]
-            ],
-            2
-          ],
-          "n"
-        ]
-      ]
-      box       = [
-        "Assign",
-        "p",
-        [
-          "Function",
-          [
-            "Add",
-            [
-              "Delimiter",
-              [
-                "Sum",
-                [
-                  "Delimiter",
-                  [
-                    "Floor",
-                    [
-                      "Divide",
-                      1,
-                      [
-                        "Add",
-                        [
-                          "Power",
-                          0,
-                          [
-                            "Subtract",
-                            "n",
-                            [
-                              "Delimiter",
-                              [
-                                "Sum",
-                                [
-                                  "Delimiter",
-                                  [
-                                    "Delimiter",
-                                    [
-                                      "Product",
-                                      [
-                                        "Delimiter",
-                                        [
-                                          "Subtract",
-                                          1,
-                                          [
-                                            "Power",
-                                            0,
-                                            [
-                                              "Abs",
-                                              [
-                                                "Subtract",
-                                                [
-                                                  "Floor",
-                                                  [
-                                                    "Divide",
-                                                    ["Subscript", "v", 2],
-                                                    ["Subscript", "v", 3]
-                                                  ]
-                                                ],
-                                                [
-                                                  "Divide",
-                                                  ["Subscript", "v", 2],
-                                                  ["Subscript", "v", 3]
-                                                ]
-                                              ]
-                                            ]
-                                          ]
-                                        ]
-                                      ],
-                                      [
-                                        "Tuple",
-                                        ["Subscript", "v", 3],
-                                        2,
-                                        [
-                                          "Floor",
-                                          ["Sqrt", ["Subscript", "v", 2]]
-                                        ]
-                                      ]
-                                    ]
-                                  ]
-                                ],
-                                [
-                                  "Tuple",
-                                  ["Subscript", "v", 2],
-                                  2,
-                                  ["Subscript", "v", 1]
-                                ]
-                              ]
-                            ]
-                          ]
-                        ],
-                        1
-                      ]
-                    ]
-                  ]
-                ],
-                [
-                  "Tuple",
-                  ["Subscript", "v", 1],
-                  2,
-                  ["Floor", ["Multiply", 1.5, "n", ["Ln", "n"]]]
-                ]
-              ]
-            ],
-            2
-          ],
-          "n"
-        ]
-      ]
-      evaluate  = [
-        "Function",
-        [
-          "Add",
-          [
-            "Delimiter",
-            [
-              "Sum",
-              [
-                "Delimiter",
-                [
-                  "Floor",
-                  [
-                    "Divide",
-                    1,
-                    [
-                      "Add",
-                      [
-                        "Power",
-                        0,
-                        [
-                          "Subtract",
-                          "n",
-                          [
-                            "Delimiter",
-                            [
-                              "Sum",
-                              [
-                                "Delimiter",
-                                [
-                                  "Delimiter",
-                                  [
-                                    "Product",
-                                    [
-                                      "Delimiter",
-                                      [
-                                        "Subtract",
-                                        1,
-                                        [
-                                          "Power",
-                                          0,
-                                          [
-                                            "Abs",
-                                            [
-                                              "Subtract",
-                                              [
-                                                "Floor",
-                                                [
-                                                  "Divide",
-                                                  ["Subscript", "v", 2],
-                                                  ["Subscript", "v", 3]
-                                                ]
-                                              ],
-                                              [
-                                                "Divide",
-                                                ["Subscript", "v", 2],
-                                                ["Subscript", "v", 3]
-                                              ]
-                                            ]
-                                          ]
-                                        ]
-                                      ]
-                                    ],
-                                    [
-                                      "Tuple",
-                                      ["Subscript", "v", 3],
-                                      2,
-                                      [
-                                        "Floor",
-                                        ["Sqrt", ["Subscript", "v", 2]]
-                                      ]
-                                    ]
-                                  ]
-                                ]
-                              ],
-                              [
-                                "Tuple",
-                                ["Subscript", "v", 2],
-                                2,
-                                ["Subscript", "v", 1]
-                              ]
-                            ]
-                          ]
-                        ]
-                      ],
-                      1
-                    ]
-                  ]
-                ]
-              ],
-              [
-                "Tuple",
-                ["Subscript", "v", 1],
-                2,
-                ["Floor", ["Multiply", 1.5, "n", ["Ln", "n"]]]
-              ]
-            ]
-          ],
-          2
-        ],
-        "n"
-      ]
-    `);
+    ).toMatchInlineSnapshot(
+      `Error: Invalid function (n) |-> {sum_(At(v, 1)=2)^(floor(1.5n * ln(n)))(floor(1 / (0^(n - sum_(At(v, 2)=2)^(At(v, 1))(prod_(At(v, 3)=2)^(floor(sqrt(Error(ErrorCode(incompatible-domain, "Numbers", "Anything"), At(v, 2)))))(1 + 0^|floor(Error(ErrorCode(incompatible-domain, "Numbers", "Anything"), At(v, 2)) / Error(ErrorCode(incompatible-domain, "Numbers", "Anything"), At(v, 3))) - Error(ErrorCode(incompatible-domain, "Numbers", "Anything"), At(v, 2)) / Error(ErrorCode(incompatible-domain, "Numbers", "Anything"), At(v, 3))|))) + 1))) + 2}`
+    );
   }));
 
 // The value of these polynomials for x in 0..n are all prime numbers
 describe('Euler Prime Generating Polynomial', () => {
   test('x in 0..39', () =>
     expect(check('n^2 + n + 41')).toMatchInlineSnapshot(`
-      latex     = ["Add", ["Power", "n", 2], "n", 41]
-      ["Add", ["Square", "n"], "n", 41]
+      box       = ["Add", ["Power", "n", 2], "n", 41]
+      canonical = ["Add", ["Square", "n"], "n", 41]
     `));
   test('x in 0..61', () =>
     expect(check('8x^2 - 488 x + 7243')).toMatchInlineSnapshot(`
-      latex     = [
-        "Add",
-        [
-          "Subtract",
-          ["InvisibleOperator", 8, ["Power", "x", 2]],
-          ["InvisibleOperator", 488, "x"]
-        ],
-        7243
-      ]
       box       = [
         "Add",
-        ["Multiply", 8, ["Square", "x"]],
-        ["Negate", ["Multiply", 488, "x"]],
+        ["InvisibleOperator", 8, ["Power", "x", 2]],
+        ["InvisibleOperator", -488, "x"],
         7243
       ]
-      simplify  = [
+      canonical = [
         "Add",
         ["Multiply", 8, ["Square", "x"]],
         ["Multiply", -488, "x"],
@@ -371,22 +137,13 @@ describe('Euler Prime Generating Polynomial', () => {
     `));
   test('x in ', () =>
     expect(check('43 x^2 - 537x + 2971')).toMatchInlineSnapshot(`
-      latex     = [
-        "Add",
-        [
-          "Subtract",
-          ["InvisibleOperator", 43, ["Power", "x", 2]],
-          ["InvisibleOperator", 537, "x"]
-        ],
-        2971
-      ]
       box       = [
         "Add",
-        ["Multiply", 43, ["Square", "x"]],
-        ["Negate", ["Multiply", 537, "x"]],
+        ["InvisibleOperator", 43, ["Power", "x", 2]],
+        ["InvisibleOperator", -537, "x"],
         2971
       ]
-      simplify  = [
+      canonical = [
         "Add",
         ["Multiply", 43, ["Square", "x"]],
         ["Multiply", -537, "x"],
@@ -395,22 +152,13 @@ describe('Euler Prime Generating Polynomial', () => {
     `));
   test('x in 0..45', () =>
     expect(check('36 x^2 - 810 x + 2763')).toMatchInlineSnapshot(`
-      latex     = [
-        "Add",
-        [
-          "Subtract",
-          ["InvisibleOperator", 36, ["Power", "x", 2]],
-          ["InvisibleOperator", 810, "x"]
-        ],
-        2763
-      ]
       box       = [
         "Add",
-        ["Multiply", 36, ["Square", "x"]],
-        ["Negate", ["Multiply", 810, "x"]],
+        ["InvisibleOperator", 36, ["Power", "x", 2]],
+        ["InvisibleOperator", -810, "x"],
         2763
       ]
-      simplify  = [
+      canonical = [
         "Add",
         ["Multiply", 36, ["Square", "x"]],
         ["Multiply", -810, "x"],
@@ -419,23 +167,18 @@ describe('Euler Prime Generating Polynomial', () => {
     `));
   test('x in', () =>
     expect(check('x^2 - 79x + 1601')).toMatchInlineSnapshot(`
-      latex     = [
-        "Add",
-        ["Subtract", ["Power", "x", 2], ["InvisibleOperator", 79, "x"]],
-        1601
-      ]
-      box       = ["Add", ["Negate", ["Multiply", 79, "x"]], ["Square", "x"], 1601]
-      simplify  = ["Add", ["Multiply", -79, "x"], ["Square", "x"], 1601]
+      box       = ["Add", ["Power", "x", 2], ["InvisibleOperator", -79, "x"], 1601]
+      canonical = ["Add", ["Multiply", -79, "x"], ["Square", "x"], 1601]
     `));
   test('x in 0..10', () =>
     expect(check('2x^2 + 11')).toMatchInlineSnapshot(`
-      latex     = ["Add", ["InvisibleOperator", 2, ["Power", "x", 2]], 11]
-      ["Add", ["Multiply", 2, ["Square", "x"]], 11]
+      box       = ["Add", ["InvisibleOperator", 2, ["Power", "x", 2]], 11]
+      canonical = ["Add", ["Multiply", 2, ["Square", "x"]], 11]
     `));
   test('x in 0..10', () =>
     expect(check('x^3 + x^2 + 17')).toMatchInlineSnapshot(`
-      latex     = ["Add", ["Power", "x", 3], ["Power", "x", 2], 17]
-      ["Add", ["Power", "x", 3], ["Square", "x"], 17]
+      box       = ["Add", ["Power", "x", 3], ["Power", "x", 2], 17]
+      canonical = ["Add", ["Power", "x", 3], ["Square", "x"], 17]
     `));
 });
 
@@ -443,7 +186,7 @@ describe("Mill's formula https://en.wikipedia.org/wiki/Mills%27_constant", () =>
   test('Sequence https://oeis.org/A051254', () =>
     expect(check('\\lfloor (\\frac{3540326840}{2710032743})^{3^{n}} \\rfloor'))
       .toMatchInlineSnapshot(`
-      latex     = [
+      box       = [
         "Floor",
         [
           "Power",
@@ -451,7 +194,7 @@ describe("Mill's formula https://en.wikipedia.org/wiki/Mills%27_constant", () =>
           ["Power", 3, "n"]
         ]
       ]
-      box       = [
+      canonical = [
         "Floor",
         ["Power", ["Rational", 3540326840, 2710032743], ["Power", 3, "n"]]
       ]
@@ -478,8 +221,8 @@ describe("Mill's formula https://en.wikipedia.org/wiki/Mills%27_constant", () =>
 describe('⌈e⌉ = ⌊π⌋', () =>
   test('', () =>
     expect(check('⌈e⌉ = ⌊π⌋')).toMatchInlineSnapshot(`
-      latex     = ["Equal", ["Ceil", "e"], ["Floor", "Pi"]]
-      box       = ["Equal", ["Ceil", "ExponentialE"], ["Floor", "Pi"]]
+      box       = ["Equal", ["Ceil", "e"], ["Floor", "Pi"]]
+      canonical = ["Equal", ["Ceil", "ExponentialE"], ["Floor", "Pi"]]
       evaluate  = True
     `)));
 
@@ -492,7 +235,7 @@ describe('RAMANUJAN FACTORIAL APPROXIMATION', () =>
         '\\sqrt{\\pi}\\left(\\frac{n}{e}\\right)^n\\sqrt[6]{8n^3+4n^2+n+\\frac{1}{30}}'
       )
     ).toMatchInlineSnapshot(`
-      latex     = [
+      box       = [
         "InvisibleOperator",
         ["Sqrt", "Pi"],
         ["Power", ["Delimiter", ["Divide", "n", "e"]], "n"],
@@ -508,7 +251,7 @@ describe('RAMANUJAN FACTORIAL APPROXIMATION', () =>
           6
         ]
       ]
-      box       = [
+      canonical = [
         "Multiply",
         ["Sqrt", "Pi"],
         ["Power", ["Divide", "n", "ExponentialE"], "n"],
@@ -524,9 +267,11 @@ describe('RAMANUJAN FACTORIAL APPROXIMATION', () =>
           6
         ]
       ]
-      simplify  = [
+      evaluate  = [
         "Multiply",
-        ["Power", ["Divide", "n", "ExponentialE"], "n"],
+        ["Power", "n", "n"],
+        ["Sqrt", "Pi"],
+        ["Exp", ["Negate", "n"]],
         [
           "Root",
           [
@@ -537,21 +282,12 @@ describe('RAMANUJAN FACTORIAL APPROXIMATION', () =>
             ["Rational", 1, 30]
           ],
           6
-        ],
-        ["Sqrt", "Pi"]
+        ]
       ]
       N-auto    = [
         "Multiply",
-        "1.772453850905516027298167483341145182797549456122387128213807789852911284591032181374950656738544665",
-        [
-          "Power",
-          [
-            "Divide",
-            "n",
-            "2.718281828459045235360287471352662497757247093699959574966967627724076630353547594571382178525166427"
-          ],
-          "n"
-        ],
+        1.772453850905516,
+        ["Power", ["Multiply", 0.36787944117144233, "n"], "n"],
         [
           "Power",
           [
@@ -559,7 +295,7 @@ describe('RAMANUJAN FACTORIAL APPROXIMATION', () =>
             ["Multiply", 8, ["Power", "n", 3]],
             ["Multiply", 4, ["Square", "n"]],
             "n",
-            "0.0(3)"
+            0.03333333333333333
           ],
           "0.1(6)"
         ]
@@ -567,7 +303,7 @@ describe('RAMANUJAN FACTORIAL APPROXIMATION', () =>
       N-mach    = [
         "Multiply",
         1.7724538509055159,
-        ["Power", ["Divide", "n", 2.718281828459045], "n"],
+        ["Power", ["Multiply", 0.36787944117144233, "n"], "n"],
         [
           "Power",
           [

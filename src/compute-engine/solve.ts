@@ -1,6 +1,10 @@
-import { isInequality } from './library/relational-operator';
-import { BoxedExpression, Rule, SemiBoxedExpression } from './public';
-import { boxRules, matchRules } from './rules';
+import {
+  BoxedExpression,
+  SemiBoxedExpression,
+} from './boxed-expression/public';
+import { isInequality } from './boxed-expression/utils';
+import { Rule } from './public';
+import { matchRules } from './rules';
 import { expand } from './symbolic/expand';
 
 // https://en.wikipedia.org/wiki/Equation_solving
@@ -25,6 +29,7 @@ export const UNIVARIATE_ROOTS: Rule[] = [
     match: ['Multiply', '_x', '__a'],
     replace: 0,
     id: 'ax',
+    exact: false,
     condition: ({ __a }) => !__a.has('_x'),
   },
 
@@ -32,6 +37,7 @@ export const UNIVARIATE_ROOTS: Rule[] = [
   {
     match: ['Add', ['Divide', '_a', '_x'], '__b'],
     replace: Infinity,
+    exact: false,
     condition: ({ _a, __b }) => !_a.has('_x') && !__b.has('_x'),
   },
 
@@ -39,6 +45,7 @@ export const UNIVARIATE_ROOTS: Rule[] = [
   {
     match: ['Add', ['Multiply', '_x', '__a'], '__b'],
     replace: ['Divide', ['Negate', '__b'], '__a'],
+    exact: false,
     condition: ({ __a, __b }) => !__a.has('_x') && !__b.has('_x'),
   },
 
@@ -46,10 +53,12 @@ export const UNIVARIATE_ROOTS: Rule[] = [
   {
     match: ['Add', ['Multiply', '_a', ['Power', '_x', '_n']], '__b'],
     replace: [
-      'Divide',
-      ['Power', ['Negate', '__b'], ['Divide', 1, '_n']],
-      '_a',
+      'Power',
+      ['Divide', ['Negate', '__b'], '_a'],
+      ['Divide', 1, '_n'],
     ],
+
+    exact: false,
     condition: ({ _a, __b, _n }) =>
       !_a.has('_x') && !__b.has('_x') && !_n.isZero,
   },
@@ -78,6 +87,7 @@ export const UNIVARIATE_ROOTS: Rule[] = [
       ],
       ['Multiply', 2, '__a'],
     ],
+    exact: false,
     condition: ({ __a, __b, __c }) =>
       !__a.has('_x') && !__b.has('_x') && !__c.has('_x'),
   },
@@ -101,6 +111,7 @@ export const UNIVARIATE_ROOTS: Rule[] = [
       ],
       ['Multiply', 2, '__a'],
     ],
+    exact: false,
     condition: ({ __a, __b, __c }) =>
       !__a.has('_x') && !__b.has('_x') && !__c.has('_x'),
   },
@@ -113,6 +124,7 @@ export const UNIVARIATE_ROOTS: Rule[] = [
       '__c',
     ],
     replace: ['Divide', ['Ln', ['Negate', ['Divide', '__c', '__a']]], '__b'],
+    exact: false,
     condition: ({ __a, __c }, ce) =>
       ((!__a.isZero && ce.div(__c, __a).isNegative) ?? false) &&
       !__a.has('_x') &&
@@ -123,6 +135,7 @@ export const UNIVARIATE_ROOTS: Rule[] = [
   {
     match: ['Add', ['Multiply', '__a', ['Exp', '_x']], '__c'],
     replace: ['Ln', ['Negate', ['Divide', '__c', '__a']]],
+    exact: false,
     condition: ({ __a, __c }, ce) =>
       ((!__a.isZero && ce.div(__c, __a).isNegative) ?? false) &&
       !__a.has('_x') &&
@@ -133,28 +146,32 @@ export const UNIVARIATE_ROOTS: Rule[] = [
   // {
   //   match: ['Add', ['Exp', '_x'], '__c'],
   //   replace: ['Ln', ['Negate', '__c']],
-  //   condition: ({ __c }) => __c.isNegative ?? false,
+  //   exact: false,
+  //  condition: ({ __c }) => __c.isNegative ?? false,
   // },
 
   // // e^(bx) + c = 0
   // {
   //   match: ['Add', ['Exp', ['Multiply', '__b', '_x']], '__c'],
   //   replace: ['Divide', ['Ln', ['Negate', '__c']], '__b'],
-  //   condition: ({ __c }) => __c.isNegative ?? false,
+  //   exact: false,
+  //  condition: ({ __c }) => __c.isNegative ?? false,
   // },
 
   // // a * log_b(x) + c = 0
   // {
   //   match: ['Add', ['Multiply', '__a', ['Log', '_x', '__b']], '__c'],
   //   replace: ['Power', '__b', ['Negate', ['Divide', '__c', '__a']]],
-  //   condition: ({ __a, __b }) => (!__a.isZero && __b.isPositive) ?? false,
+  //   exact: false,
+  //  condition: ({ __a, __b }) => (!__a.isZero && __b.isPositive) ?? false,
   // },
 
   // // a * log_b(x) = 0
   // {
   //   match: ['Multiply', '__a', ['Log', '_x', '__b']],
   //   replace: ['Power', '__b', ['Negate', ['Divide', '__c', '__a']]],
-  //   condition: ({ __a, __b }) => (!__a.isZero && __b.isPositive) ?? false,
+  //   exact: false,
+  //  condition: ({ __a, __b }) => (!__a.isZero && __b.isPositive) ?? false,
   // },
 
   // // |ax + b| + c = 0
@@ -181,12 +198,16 @@ export function findUnivariateRoots(
   const ce = expr.engine;
 
   if (expr.head === 'Equal') {
-    expr = ce.add(expr.op1.canonical, ce.neg(expr.op2.canonical)).simplify();
+    expr = ce
+      .function('Add', [
+        expr.op1.canonical,
+        ce.function('Negate', [expr.op2.canonical]),
+      ])
+      .simplify();
   }
 
-  const rules = ce.cache('univariate-roots-rules', () =>
-    boxRules(ce, UNIVARIATE_ROOTS)
-  );
+  const rules = ce.getRuleSet('solve-univariate')!;
+
   // Make the unknown '_x' so that we can match against it
   let exprs = [expr.subs({ [x]: '_x' }, { canonical: false })];
 
@@ -197,7 +218,7 @@ export function findUnivariateRoots(
   // If we didn't find a solution yet, try modifying the expression
   //
   // Note: @todo we can try different heuristics here:
-  // Collection: reduce the numbers of occurences of the unknown
+  // Collection: reduce the numbers of occurrences of the unknown
   // Attraction: bring the occurences of the unknonw closer together
   // Function Swapping: replacing function with ones easier to solve
   //    - square roots: square both sides
@@ -351,10 +372,8 @@ export const HARMONIZATION_RULES: Rule[] = [
  */
 function harmonize(expr: BoxedExpression): BoxedExpression[] {
   const ce = expr.engine;
-  const rules = ce.cache('univariate-roots-rules', () =>
-    boxRules(ce, HARMONIZATION_RULES)
-  );
-  let result = matchRules(expr, rules, { _x: ce.symbol('_x') });
+  const rules = ce.getRuleSet('harmonization')!;
+  const result = matchRules(expr, rules, { _x: ce.symbol('_x') });
 
   return result;
 }

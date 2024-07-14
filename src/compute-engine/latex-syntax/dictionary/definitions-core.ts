@@ -10,8 +10,8 @@ import {
   missingIfEmpty,
   stripText,
   isEmptySequence,
-  symbol,
   unhold,
+  symbol,
 } from '../../../math-json/utils';
 import {
   ADDITION_PRECEDENCE,
@@ -485,6 +485,32 @@ export const DEFINITIONS_CORE: LatexDictionary = [
   { name: 'LatexTokens', serialize: serializeLatexTokens },
 
   {
+    name: 'At',
+    kind: 'postfix',
+    precedence: 810,
+    latexTrigger: ['['],
+    parse: parseAt(']'),
+    serialize: (serializer, expr) =>
+      joinLatex(['\\lbrack', serializeOps(', ')(serializer, expr), '\\rbrack']),
+  },
+  {
+    kind: 'postfix',
+    precedence: 810,
+    latexTrigger: ['\\lbrack'],
+    parse: parseAt('\\rbrack'),
+  },
+  {
+    kind: 'postfix',
+    precedence: 810,
+    latexTrigger: ['\\left', '\\lbrack'],
+    parse: parseAt('\\right', '\\rbrack'),
+  },
+  {
+    kind: 'postfix',
+    latexTrigger: ['_'],
+    parse: parseAt(),
+  },
+  {
     name: 'List',
     kind: 'matchfix',
     openTrigger: '[',
@@ -711,7 +737,8 @@ export const DEFINITIONS_CORE: LatexDictionary = [
     latexTrigger: ['^', '<{>', '('],
     kind: 'postfix',
     parse: (parser: Parser, lhs, until) => {
-      if (!parser.computeEngine?.box(lhs)?.domain?.isFunction) return null;
+      const sym = symbol(lhs);
+      if (!sym || parser.getIdentifierType(sym) !== 'function') return null;
 
       const start = parser.index;
       parser.addBoundary([')']);
@@ -735,7 +762,8 @@ export const DEFINITIONS_CORE: LatexDictionary = [
     parse: (parser: Parser, lhs: Expression) => {
       // If the lhs is a function, return the inverse function
       // i.e. f^{-1} -> InverseFunction(f)
-      if (!parser.computeEngine?.box(lhs)?.domain?.isFunction) return null;
+      const sym = symbol(lhs);
+      if (!sym || parser.getIdentifierType(sym) !== 'function') return null;
 
       // There may be additional postfixes, i.e. \prime, \doubleprime,
       // \tripleprime in the superscript. Account for them.
@@ -1030,9 +1058,12 @@ function parsePrime(
     const n = machineValue(op(lhs, 2)) ?? 1;
     return [lhsh, missingIfEmpty(op(lhs, 1)), n + order];
   }
+
   // If the lhs is a function, return the derivative
   // i.e. f' -> Derivative(f)
-  if (parser.computeEngine?.box(lhs)?.domain?.isFunction) {
+
+  const sym = symbol(lhs);
+  if ((sym && parser.getIdentifierType(sym) === 'function') || head(lhs)) {
     if (order === 1) return ['Derivative', lhs];
     return ['Derivative', lhs, order];
   }
@@ -1046,9 +1077,18 @@ function parseParenDelimiter(
   _parser: Parser,
   body: Expression
 ): Expression | null {
-  // Handle `()` used for example with `f()`
+  // During parsing, we keep a Delimiter expression as it captures the most
+  // information (separator and fences).
+  // The Delimiter canonicalization will turn it into something else if
+  // appropriate (Tuple, etc...).
+
+  // Handle `()` used for example with `f()`. This will be handled in
+  // `canonicalInvisibleOperator()`
   if (body === null || isEmptySequence(body)) return ['Delimiter'];
+
   const h = head(body);
+  // We have a Delimiter inside parens: e.g. `(a, b, c)` with `a, b, c` the
+  // Delimiter function.
   if (h === 'Delimiter' && op(body, 2)) {
     const delims = stringValue(op(body, 2));
     if (delims?.length === 1) {
@@ -1057,14 +1097,9 @@ function parseParenDelimiter(
     }
   }
 
-  if (h === 'Sequence') {
-    if (nops(body) === 0) return ['Delimiter'];
-    if (nops(body) === 1) return ['Delimiter', op(body, 1)!];
-    return ['Delimiter', body];
-  }
-
+  // @todo: does this codepath ever get hit?
   if (h === 'Matrix') {
-    let delims = stringValue(op(body, 2)) ?? '..';
+    const delims = stringValue(op(body, 2)) ?? '..';
     if (delims === '..') return ['Matrix', op(body, 1)!];
   }
 
@@ -1262,4 +1297,29 @@ function parseWhich(parser: Parser): Expression | null {
     }
   }
   return result;
+}
+
+function parseAt(...close: string[]): (parser, lhs) => Expression | null {
+  return (parser: Parser, lhs: Expression): Expression | null => {
+    // If the lhs is a symbol or a List literal...
+    if (!symbol(lhs) && head(lhs) !== 'List') return null;
+    const index = parser.index;
+
+    let rhs: Expression | null = null;
+    if (close.length === 0) rhs = parser.parseGroup();
+    rhs ??= parser.parseExpression({ minPrec: 0 });
+    if (rhs === null) {
+      parser.index = index;
+      return null;
+    }
+
+    if (close.length > 0 && !parser.matchAll(close)) {
+      parser.index = index;
+      return null;
+    }
+
+    if (head(rhs) === 'Delimiter') rhs = op(rhs, 1) ?? ['Sequence'];
+    if (head(rhs) === 'Sequence') return ['At', lhs, ...ops(rhs)!];
+    return ['At', lhs, rhs];
+  };
 }

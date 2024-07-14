@@ -9,7 +9,6 @@ import {
 } from '../library/domains';
 import {
   BoxedDomain,
-  BoxedExpression,
   BoxedSubstitution,
   DomainCompatibility,
   DomainConstructor,
@@ -18,11 +17,11 @@ import {
   IComputeEngine,
   Metadata,
   PatternMatchOptions,
-  SemiBoxedExpression,
 } from '../public';
 import { _BoxedExpression } from './abstract-boxed-expression';
 import { hashCode, isBoxedExpression } from './utils';
 import { isWildcard, wildcardName } from './boxed-patterns';
+import { BoxedExpression, SemiBoxedExpression } from './public';
 
 /**
  * A `_BoxedDomain` is a wrapper around a boxed, canonical, domain
@@ -137,6 +136,14 @@ export class _BoxedDomain extends _BoxedExpression implements BoxedDomain {
     return this._hash;
   }
 
+  evaluate(): BoxedDomain {
+    return this;
+  }
+
+  simplify(): BoxedDomain {
+    return this;
+  }
+
   isCompatible(
     dom: BoxedDomain | DomainLiteral,
     compatibility: DomainCompatibility = 'covariant'
@@ -187,7 +194,8 @@ export class _BoxedDomain extends _BoxedExpression implements BoxedDomain {
   ): BoxedSubstitution | null {
     if (!isBoxedExpression(pattern))
       pattern = this.engine.box(pattern, { canonical: false });
-    if (isWildcard(pattern)) return { [wildcardName(pattern)!]: this };
+    if (isWildcard(pattern as BoxedExpression))
+      return { [wildcardName(pattern as BoxedExpression)!]: this };
     if (!(pattern instanceof _BoxedDomain)) return null;
     if (this.isCompatible(pattern, 'invariant')) return {};
     return null;

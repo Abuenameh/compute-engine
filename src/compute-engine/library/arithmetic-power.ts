@@ -1,42 +1,43 @@
-import { Complex } from 'complex.js';
+import Complex from 'complex.js';
 import { Decimal } from 'decimal.js';
 import {
   complexAllowed,
   bignumPreferred,
   asBigint,
 } from '../boxed-expression/utils';
-import {
-  asBignum,
-  asFloat,
-  asSmallInteger,
-  factorPower,
-} from '../numerics/numeric';
+import { factorPower } from '../numerics/numeric';
 import {
   bigint,
   factorPower as bigFactorPower,
 } from '../numerics/numeric-bigint';
 import {
-  asRational,
+  Rational,
   isBigRational,
   isMachineRational,
   isRational,
-  isRationalOne,
+  isOne,
   machineDenominator,
   machineNumerator,
-  mul,
 } from '../numerics/rationals';
-import { BoxedExpression, IComputeEngine, Metadata, Rational } from '../public';
+import { BoxedExpression, IComputeEngine, Metadata } from '../public';
 import { applyN } from '../symbolic/utils';
+import {
+  asFloat,
+  asRational,
+  asMachineInteger,
+  mul,
+  asBignum,
+} from '../boxed-expression/numerics';
 
 /**
  *
  */
 export function canonicalPower(
-  ce: IComputeEngine,
   base: BoxedExpression,
   exponent: BoxedExpression,
   metadata?: Metadata
 ): BoxedExpression {
+  const ce = base.engine;
   if (exponent.symbol === 'ComplexInfinity') return ce.NaN;
 
   if (exponent.isZero) return ce.One;
@@ -102,9 +103,9 @@ export function canonicalPower(
 
   // a^b^c -> a^(b*c)
   if (base.head === 'Power' && base.op1.isReal) {
-    const a = asSmallInteger(exponent);
+    const a = asMachineInteger(exponent);
     if (a !== null) {
-      const b = asSmallInteger(base.op2);
+      const b = asMachineInteger(base.op2);
       if (b !== null) return ce.pow(base.op1, ce.number(a * b));
     }
     if (base.op1.isNonNegative) {
@@ -115,6 +116,12 @@ export function canonicalPower(
       }
     }
   }
+  if (base.head === 'Power')
+    return ce._fn(
+      'Power',
+      [base.op1, ce.evalMul(base.op2, exponent)],
+      metadata
+    );
 
   return ce._fn('Power', [base, exponent], metadata);
 }
@@ -138,9 +145,9 @@ export function square(
     ); // Don't call ce.mul() to avoid infinite loops
 
   if (base.head === 'Power') {
-    const exp = asSmallInteger(base.op2);
+    const exp = asMachineInteger(base.op2);
     if (exp !== null) return ce.pow(base.op1, ce.number(exp * 2));
-    return ce.pow(base.op1, ce.mul(ce.number(2), base.op2));
+    return ce.pow(base.op1, ce.evalMul(ce.number(2), base.op2));
   }
 
   return ce.pow(base, ce.number(2));
@@ -206,7 +213,7 @@ function numEvalPower(
   if (invExp === 2) {
     if (floatBase < 0) {
       return complexAllowed(ce)
-        ? ce.mul(ce.I, ce.number(Math.sqrt(-floatBase)))
+        ? ce.evalMul(ce.I, ce.number(Math.sqrt(-floatBase)))
         : ce.NaN;
     }
     return ce.number(Math.sqrt(floatBase));
@@ -248,6 +255,15 @@ export function processPower(
     return result;
   }
 
+  if (base.head === 'Divide') {
+    return ce.function('Divide', [
+      processPower(ce, base.op1, exponent, mode) ??
+        ce._fn('Power', [base.op1, exponent]),
+      processPower(ce, base.op2, exponent, mode) ??
+        ce._fn('Power', [base.op2, exponent]),
+    ]);
+  }
+
   if (base.head === 'Multiply') {
     let c: Rational = bignumPreferred(ce) ? [BigInt(1), BigInt(1)] : [1, 1];
     let sqrt = c;
@@ -262,7 +278,7 @@ export function processPower(
       }
     }
 
-    if (!isRationalOne(c) || !isRationalOne(sqrt)) {
+    if (!isOne(c) || !isOne(sqrt)) {
       const a1 = processPower(ce, ce.number(c), exponent, mode);
       const a2 = processPower(
         ce,
@@ -270,17 +286,17 @@ export function processPower(
         ce.div(exponent, ce.number(2)),
         mode
       );
-      const xsprod = ce.mul(...xs);
+      const xsprod = ce.evalMul(...xs);
       const a3 =
         processPower(ce, xsprod, exponent, mode) ??
         ce._fn('Power', [xsprod, exponent]);
-      if (a1 && a2 && a3) return ce.mul(a1, a2, a3);
+      if (a1 && a2 && a3) return ce.evalMul(a1, a2, a3);
     }
   }
 
   if (base.head === 'Power') {
     // a^-1^-1 -> a
-    if (asSmallInteger(base.op2) === -1 && asSmallInteger(exponent) === -1)
+    if (asMachineInteger(base.op2) === -1 && asMachineInteger(exponent) === -1)
       return base.op1;
 
     const e1 = asRational(base.op2);
@@ -307,13 +323,13 @@ export function processPower(
   //
   if (mode !== 'N' && base.numericValue !== null && base.isInteger) {
     if (base.isOne) return ce.One;
-    const smallExpr = asSmallInteger(exponent);
+    const smallExpr = asMachineInteger(exponent);
     if (smallExpr) return numEvalPower(ce, base, exponent);
 
     const r = asRational(exponent);
     if (r) {
       const [n, d] = [machineNumerator(r), machineDenominator(r)];
-      if ((n === 1 || n === -1) && (d === 2 || d === 3)) {
+      if ((n === 1 || n === -1) && (d % 2 === 0 || d === 3)) {
         if (bignumPreferred(ce) || base.numericValue instanceof Decimal) {
           const bigBase = asBigint(base)!;
           if (d % 2 === 0 && bigBase < 0 && !complexAllowed(ce)) return ce.NaN;
@@ -331,12 +347,12 @@ export function processPower(
           // If factor === 1, nothing special to do, fall through
           if (factor !== BigInt(1)) {
             if (root === BigInt(1))
-              return ce.mul(
+              return ce.evalMul(
                 sign,
                 ce.number(n >= 0 ? factor : [BigInt(1), factor])
               );
 
-            return ce.mul(
+            return ce.evalMul(
               sign,
               ce.number(factor),
               ce.pow(ce.number(root), exponent)
@@ -359,9 +375,9 @@ export function processPower(
           if (root === 1 && factor === 1) return sign;
           if (factor !== 1) {
             if (root === 1)
-              return ce.mul(sign, ce.number(n >= 0 ? factor : [1, factor]));
+              return ce.evalMul(sign, ce.number(n >= 0 ? factor : [1, factor]));
 
-            return ce.mul(
+            return ce.evalMul(
               sign,
               ce.number(factor),
               ce.pow(ce.number(root), exponent)
@@ -373,7 +389,7 @@ export function processPower(
       }
       if (base.isNegative) {
         if (!complexAllowed) return ce.NaN;
-        return ce.mul(ce.I, ce.box(['Sqrt', ce.neg(base)]));
+        return ce.evalMul(ce.I, ce.box(['Sqrt', base.neg()]));
       }
       return undefined;
     }
@@ -393,80 +409,6 @@ export function processPower(
     exponent.numericValue !== null
   )
     return numEvalPower(ce, base, exponent);
-
-  return undefined;
-}
-
-export function processSqrt(
-  ce: IComputeEngine,
-  base: BoxedExpression,
-  mode: 'simplify' | 'evaluate' | 'N'
-): BoxedExpression | undefined {
-  if (base.isOne) return ce.One;
-  if (base.isZero) return ce.Zero;
-  if (base.isNegativeOne) return complexAllowed(ce) ? ce.I : ce.NaN;
-  if (base.isNegative && !complexAllowed(ce)) return ce.NaN;
-
-  const r = asRational(base);
-
-  if (mode === 'N' || (mode === 'evaluate' && !r))
-    return applyN(
-      base,
-      (x) => (x < 0 ? ce.complex(x).sqrt() : Math.sqrt(x)),
-      (x) => (x.isNeg() ? ce.complex(x.toNumber()).sqrt() : x.sqrt()),
-      (x) => x.sqrt()
-    );
-
-  const n = asSmallInteger(base);
-  if (n !== null) {
-    const [factor, root] = factorPower(Math.abs(n), 2);
-    if (factor === 1) return ce._fn('Sqrt', [base]);
-    if (n < 0) {
-      if (root === 1) return ce.number(ce.complex(0, factor));
-      return ce.mul(ce.number(ce.complex(0, factor)), ce.sqrt(ce.number(root)));
-    }
-    if (root === 1) return ce.number(factor);
-    return ce.mul(ce.number(factor), ce.sqrt(ce.number(root)));
-  }
-
-  if (r) {
-    if (isMachineRational(r) && !bignumPreferred(ce)) {
-      const [n, d] = r;
-      if (
-        Math.abs(n) < Number.MAX_SAFE_INTEGER &&
-        d < Number.MAX_SAFE_INTEGER
-      ) {
-        const [nFactor, nRoot] = factorPower(Math.abs(n), 2);
-        const [dFactor, dRoot] = factorPower(d, 2);
-        if (n < 0)
-          return ce.mul(
-            ce.number([nFactor, dFactor]),
-            ce.sqrt(ce.number([nRoot, dRoot])),
-            ce.I
-          );
-
-        const factor = ce.number([nFactor, dFactor]);
-        if (factor.isOne) return ce._fn('Sqrt', [ce.number([nRoot, dRoot])]);
-        return ce.mul(factor, ce.sqrt(ce.number([nRoot, dRoot])));
-      }
-    }
-    if (isBigRational(r) || bignumPreferred(ce)) {
-      const n = bigint(r[0]);
-      const [nFactor, nRoot] = bigFactorPower(n > 0 ? n : -n, 2);
-      const [dFactor, dRoot] = bigFactorPower(bigint(r[1]), 2);
-
-      if (n < 0)
-        return ce.mul(
-          ce.number([nFactor, dFactor]),
-          ce.sqrt(ce.number([nRoot, dRoot])),
-          ce.I
-        );
-
-      const factor = ce.number([nFactor, dFactor]);
-      if (factor.isOne) return ce._fn('Sqrt', [ce.number([nRoot, dRoot])]);
-      return ce.mul(factor, ce.sqrt(ce.number([nRoot, dRoot])));
-    }
-  }
 
   return undefined;
 }

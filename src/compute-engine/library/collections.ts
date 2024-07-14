@@ -1,12 +1,18 @@
 import { checkArity, checkDomains } from '../boxed-expression/validate';
 import { canonical } from '../symbolic/utils';
-import { asFloat } from '../numerics/numeric';
 import {
   BoxedExpression,
   IComputeEngine,
   IdentifierDefinitions,
   SemiBoxedExpression,
 } from '../public';
+import { asFloat, asMachineInteger } from '../boxed-expression/numerics';
+import {
+  each,
+  isFiniteCollection,
+  isFiniteIndexableCollection,
+} from '../collection-utils';
+import { applicable } from '../function-utils';
 
 // From NumPy:
 export const DEFAULT_LINSPACE_COUNT = 50;
@@ -102,6 +108,33 @@ export const COLLECTIONS_LIBRARY: IdentifierDefinitions = {
         if (expr.ops![i - 1]!.isEqual(target)) return i;
 
       return undefined;
+    },
+  },
+
+  // Extensional set. Elements do not repeat. The order of the elements is not significant.
+  // For intensional set, use `Any` with a condition, e.g. `Any(x > 0, x in RealNumbers)` @todo
+  Set: {
+    complexity: 8200,
+    hold: 'all',
+    signature: {
+      domain: ['FunctionOf', ['VarArg', 'Anything'], 'Sets'],
+      canonical: canonicalSet,
+    },
+    size: (expr) => expr.nops!,
+    iterator: (expr, start, count) => {
+      let index = start ?? 1;
+      count = Math.min(count ?? expr.nops!, expr.nops!);
+      if (count <= 0) return { next: () => ({ value: undefined, done: true }) };
+      return {
+        next: () => {
+          if (count! > 0) {
+            count!--;
+            return { value: expr.ops![index++ - 1], done: false };
+          } else {
+            return { value: undefined, done: true };
+          }
+        },
+      };
     },
   },
 
@@ -387,16 +420,25 @@ export const COLLECTIONS_LIBRARY: IdentifierDefinitions = {
   At: {
     complexity: 8200,
     signature: {
-      domain: ['FunctionOf', 'Values', 'Values', 'Values'],
+      params: ['Values'],
+      restParam: 'Values',
+
       evaluate: (ce, ops) => {
-        const expr = ops[0];
-        const def = expr.functionDefinition;
-        if (!def?.at) return undefined;
-        const s = ops[1].string;
-        if (s !== null) return def.at(expr, 1) ?? ce.Nothing;
-        const i = asFloat(ops[1]);
-        if (i === null || !Number.isInteger(i)) return undefined;
-        return def.at(expr, i) ?? ce.Nothing;
+        let expr = ops[0];
+        let index = 1;
+        while (ops[index]) {
+          const def = expr.functionDefinition;
+          if (!def?.at) return undefined;
+          const s = ops[index].string;
+          if (s !== null) expr = def.at(expr, s) ?? ce.Nothing;
+          else {
+            const i = asFloat(ops[index]);
+            if (i === null || !Number.isInteger(i)) return undefined;
+            expr = def.at(expr, i) ?? ce.Nothing;
+          }
+          index += 1;
+        }
+        return expr;
       },
     },
   },
@@ -506,11 +548,31 @@ export const COLLECTIONS_LIBRARY: IdentifierDefinitions = {
   // { 2x | x ∈ [ 1 , 10 ] }
   Map: {
     complexity: 8200,
+    hold: 'last',
     signature: {
-      domain: ['FunctionOf', 'Collections', 'Functions', 'Collections'],
-      evaluate: (_ce, _ops) => {
-        // @todo
-        return undefined;
+      domain: ['FunctionOf', 'Collections', 'Anything', 'Collections'],
+      evaluate: (ce, ops) => {
+        const [collection, fn] = collectionFunction(ops);
+        if (!fn) return undefined;
+
+        const result: BoxedExpression[] = [];
+        for (const op of collection) result.push(fn([op]) ?? ce.Nothing);
+
+        const h = ops[0].head;
+        const newHead =
+          {
+            List: 'List',
+            Set: 'Set',
+            Range: 'List',
+            Linspace: 'List',
+            Single: 'List',
+            Pair: 'List',
+            Triple: 'List',
+            Tuple: 'List',
+            String: 'String',
+          }[typeof h === 'string' ? h : 'List'] ?? 'List';
+
+        return ce.function(newHead, result);
       },
     },
   },
@@ -519,11 +581,42 @@ export const COLLECTIONS_LIBRARY: IdentifierDefinitions = {
   // [x | x in xs, p(x)]
   Filter: {
     complexity: 8200,
+    hold: 'last',
     signature: {
-      domain: ['FunctionOf', 'Values', 'Functions', 'Values'],
-      evaluate: (_ce, _ops) => {
-        // @todo
-        return undefined;
+      domain: ['FunctionOf', 'Values', 'Anything', 'Values'],
+      evaluate: (ce, ops) => {
+        const fn = applicable(ops[1]);
+        if (!fn) return undefined;
+
+        const collection = ops[0];
+        if (collection.string) {
+          return ce.string(
+            collection.string
+              .split('')
+              .map((c) => (fn([ce.string(c)])?.symbol === 'True' ? c : ''))
+              .join('')
+          );
+        }
+
+        if (!isFiniteIndexableCollection(ops[0]) || !ops[1]) return undefined;
+        const result: BoxedExpression[] = [];
+        for (const op of each(collection))
+          if (fn([op])?.symbol === 'True') result.push(op);
+
+        const h = collection.head;
+        const newHead =
+          {
+            List: 'List',
+            Set: 'Set',
+            Range: 'List',
+            Linspace: 'List',
+            Single: 'List',
+            Pair: 'List',
+            Triple: 'List',
+            Tuple: 'List',
+          }[typeof h === 'string' ? h : 'List'] ?? 'List';
+
+        return ce.function(newHead, result);
       },
     },
   },
@@ -532,11 +625,12 @@ export const COLLECTIONS_LIBRARY: IdentifierDefinitions = {
   // For "foldr", apply Reverse() first
   Reduce: {
     complexity: 8200,
+    hold: 'last',
     signature: {
       domain: [
         'FunctionOf',
         'Values',
-        'Functions',
+        'Anything',
         ['OptArg', 'Values'],
         'Values',
       ],
@@ -549,17 +643,49 @@ export const COLLECTIONS_LIBRARY: IdentifierDefinitions = {
 
   Tabulate: {
     complexity: 8200,
+    hold: 'first',
     signature: {
       domain: [
         'FunctionOf',
-        'Functions',
+        'Anything',
         'Integers',
         ['VarArg', 'Integers'],
         'Values',
       ],
-      evaluate: (_ce, _ops) => {
-        // @todo
-        return undefined;
+      evaluate: (ce, ops) => {
+        // treated as multidimensional indexes
+        const fn = applicable(ops[0]);
+        if (!fn) return undefined;
+        if (ops.length === 1) return ce.function('List', []);
+        const dims = ops.slice(1).map((op) => asMachineInteger(op));
+        if (dims.some((d) => d === null || d <= 0)) return undefined;
+        if (dims.length === 1) {
+          // @fastpath
+          return ce.function(
+            'List',
+            Array.from(
+              { length: dims[0] ?? 0 },
+              (_, i) => fn([ce.number(i + 1)]) ?? ce.Nothing
+            )
+          );
+        }
+
+        const fillArray = (dims: number[], index: number[], level = 0): any => {
+          // Apply the function `fn` to the current index array
+          if (level === dims.length) {
+            const idx = index.map((i) => ce.number(i));
+            return fn(idx);
+          }
+
+          const arr: any[] = ['List'];
+          for (let i = 1; i <= dims[level]; i++) {
+            index[level] = i;
+            arr.push(fillArray(dims, index, level + 1));
+          }
+          return arr;
+        };
+
+        return ce.box(fillArray(dims as number[], Array(dims.length).fill(0)));
       },
     },
   },
@@ -571,9 +697,13 @@ export const COLLECTIONS_LIBRARY: IdentifierDefinitions = {
     complexity: 8200,
     signature: {
       domain: ['FunctionOf', 'Values', 'Tuples'],
-      evaluate: (_ce, _ops) => {
-        // @todo
-        return undefined;
+      evaluate: (ce, ops) => {
+        if (!isFiniteCollection(ops[0])) return undefined;
+        const [values, counts] = tally(ops[0]!);
+        return ce.tuple([
+          ce.function('List', values),
+          ce.function('List', counts),
+        ]);
       },
     },
   },
@@ -585,9 +715,10 @@ export const COLLECTIONS_LIBRARY: IdentifierDefinitions = {
     complexity: 8200,
     signature: {
       domain: ['FunctionOf', 'Values', 'Tuples'],
-      evaluate: (_ce, _ops) => {
-        // @todo
-        return undefined;
+      evaluate: (ce, ops) => {
+        if (!isFiniteCollection(ops[0])) return undefined;
+        const [values, _counts] = tally(ops[0]!);
+        return ce.function('List', values);
       },
     },
   },
@@ -629,16 +760,26 @@ export const COLLECTIONS_LIBRARY: IdentifierDefinitions = {
     },
   },
 
-  // If all the arguments have the same head, return a new expression
-  // made of all the arguments, with the head of the first argument
+  // Return a list of the elements of each collection.
+  // If all collections are Set, return a Set
   // ["Join", ["List", 1, 2, 3], ["List", 4, 5, 6]] -> ["List", 1, 2, 3, 4, 5, 6]
   Join: {
     complexity: 8200,
     signature: {
       domain: ['FunctionOf', ['VarArg', 'Values'], 'Values'],
-      evaluate: (_ce, _ops) => {
+      evaluate: (ce, ops) => {
         // @todo
-        return undefined;
+        const values: BoxedExpression[] = [];
+        let isSet = true;
+
+        for (const op of ops) {
+          if (op.nops === 0) values.push(op);
+          else {
+            if (op.head !== 'Set') isSet = false;
+            values.push(...op.ops!);
+          }
+        }
+        return ce.function(isSet ? 'Set' : 'List', values);
       },
     },
   },
@@ -846,4 +987,73 @@ function canonicalList(
     return op.canonical;
   });
   return ce.box(['List', ...ops]);
+}
+
+function canonicalSet(
+  ce: IComputeEngine,
+  ops: BoxedExpression[]
+): BoxedExpression {
+  // Check that each element is only present once
+  const set: BoxedExpression[] = [];
+  const has = (x) => set.some((y) => y.isEqual(x));
+
+  for (const op of ops) if (!has(op)) set.push(op);
+
+  return ce.function('Set', set, { canonical: false });
+}
+
+function collectionFunction(
+  ops: ReadonlyArray<BoxedExpression>
+): [
+  Iterable<BoxedExpression>,
+  undefined | ((args: BoxedExpression[]) => BoxedExpression | undefined),
+] {
+  if (ops.length !== 2) return [[], undefined];
+
+  const fn = applicable(ops[1]);
+  if (!fn) return [[], undefined];
+
+  if (ops[0].string) {
+    return [
+      [ops[0]],
+      (args) => {
+        const s = args[0].string;
+        if (s === null) return undefined;
+        const ce = args[0].engine;
+        return ce.string(
+          s
+            .split('')
+            .map((c) => fn([ce.string(c)])?.string ?? '')
+            .join('')
+        );
+      },
+    ];
+  }
+
+  if (!isFiniteIndexableCollection(ops[0]) || !ops[1]) return [[], undefined];
+  return [each(ops[0]), fn];
+}
+
+function tally(
+  collection: BoxedExpression
+): [ReadonlyArray<BoxedExpression>, number[]] {
+  const values: BoxedExpression[] = [];
+  const counts: number[] = [];
+
+  const indexOf = (expr: BoxedExpression) => {
+    for (let i = 0; i < values.length; i++)
+      if (values[i].isEqual(expr)) return i;
+    return -1;
+  };
+
+  for (const op of each(collection)) {
+    const index = indexOf(op);
+    if (index >= 0) counts[index]++;
+    else {
+      values.push(op);
+      counts.push(1);
+    }
+  }
+
+  return [values, counts];
 }

@@ -5,7 +5,6 @@ import {
   BoxedExpression,
   IComputeEngine,
   EvaluateOptions,
-  NOptions,
   SimplifyOptions,
   Metadata,
   BoxedDomain,
@@ -24,8 +23,8 @@ import {
 } from '../symbolic/tensor-fields';
 import { AbstractTensor, TensorData, makeTensor } from '../symbolic/tensors';
 import { _BoxedExpression } from './abstract-boxed-expression';
-import { BoxedFunction } from './boxed-function';
 import { hashCode, isBoxedExpression } from './utils';
+import { canonical } from '../symbolic/utils';
 import { isWildcard, wildcardName } from './boxed-patterns';
 
 /**
@@ -57,19 +56,20 @@ export class BoxedTensor extends _BoxedExpression {
           ops: ReadonlyArray<BoxedExpression>;
         }
       | AbstractTensor<'expression'>,
-    options?: { canonical?: boolean; metadata?: Metadata }
+    options?: { metadata?: Metadata; canonical?: boolean }
   ) {
-    options ??= {};
+    options = options ? { ...options } : {};
     options.canonical ??= true;
+
     super(ce, options.metadata);
 
     if (input instanceof AbstractTensor) {
       this._tensor = input;
     } else {
       this._head = input.head ?? 'List';
-      this._ops = options.canonical ? ce.canonical(input.ops) : input.ops;
+      this._ops = options.canonical === true ? canonical(input.ops) : input.ops;
 
-      this._expression = new BoxedFunction(ce, this._head, this._ops, {
+      this._expression = ce._fn(this._head, this._ops, {
         canonical: options.canonical,
       });
     }
@@ -114,7 +114,7 @@ export class BoxedTensor extends _BoxedExpression {
   reset(): void {}
 
   get hash(): number {
-    let h = hashCode('BoxedTensor');
+    const h = hashCode('BoxedTensor');
     // for (const [k, v] of this._value) h ^= hashCode(k) ^ v.hash;
     return h;
   }
@@ -210,12 +210,6 @@ export class BoxedTensor extends _BoxedExpression {
     return this.expression.json;
   }
 
-  get rawJson(): Expression {
-    // @todo tensor: could be optimized by avoiding creating
-    // an expression and getting the JSON from the tensor directly
-    return this.expression.rawJson;
-  }
-
   /** Structural equality */
   isSame(rhs: BoxedExpression): boolean {
     if (this === rhs) return true;
@@ -254,14 +248,14 @@ export class BoxedTensor extends _BoxedExpression {
     return this.expression.evaluate(options);
   }
 
-  simplify(options?: SimplifyOptions): BoxedExpression {
+  simplify(options?: Partial<SimplifyOptions>): BoxedExpression {
     if (this._tensor) return this;
     return this.expression.simplify(options);
   }
 
-  N(options?: NOptions): BoxedExpression {
+  N(): BoxedExpression {
     if (this._tensor) return this;
-    return this.expression.N(options);
+    return this.expression.N();
   }
 }
 
@@ -272,9 +266,14 @@ export function isBoxedTensor(val: unknown): val is BoxedTensor {
 export function expressionTensorInfo(
   head: string,
   rows: ReadonlyArray<BoxedExpression>
-) {
+):
+  | {
+      shape: number[];
+      dtype: TensorDataType | undefined;
+    }
+  | undefined {
   let dtype: TensorDataType | undefined = undefined;
-  let shape: number[] = [];
+  const shape: number[] = [];
   let valid = true;
 
   const visit = (t: ReadonlyArray<BoxedExpression>, axis = 0) => {
@@ -295,15 +294,14 @@ export function expressionTensorInfo(
 
   visit(rows);
 
-  if (!valid) return undefined;
-  return { shape, dtype };
+  return valid ? { shape, dtype } : undefined;
 }
 
 export function expressionAsTensor<T extends TensorDataType>(
   head: string,
   rows: ReadonlyArray<BoxedExpression>
 ): TensorData<T> | undefined {
-  let { shape, dtype } = expressionTensorInfo(head, rows) ?? {
+  const { shape, dtype } = expressionTensorInfo(head, rows) ?? {
     shape: [],
     dtype: undefined,
   };

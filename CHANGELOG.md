@@ -1,6 +1,328 @@
 ## [Unreleased]
 
+### Breaking Changes
+
+- The methods for algebraic operations (`add`, `div`, `mul`, etc...) have been
+  moved from the Compute Engine to the Boxed Expression class. Instead of
+  calling `ce.add(a, b)`, call `a.add(b)`.
+
+  Those methods also behave more consistently: they apply some additional
+  simplication rules over canonicalization. For example, while
+  `ce.parse('1 + 2')` return `["Add", 1, 2]`, `ce.box(1).add(2)` will return
+  `3`.
+
+### New Features and Improvements
+
+- **Exact calculations**
+
+  The Compute Engine attempts to perform exact calculations when possible.
+
+  For example `1/2 + 1/3` is evaluated to `5/6` instead of `0.8(3)`.
+
+  To get an approximate result, use the `N()` method, for example
+  `ce.parse("\\frac12 + \\frac13").N()`.
+
+  Previously the result of calculations was not always an exact number but
+  returned a numerical approximation instead.
+
+  This has now been improved by introducing internally a `NumericValue` type
+  that encapsulates exact numbers and by doing all calculations in this type.
+  Previously the calculations were handled manually in the various evaluation
+  functions. This made the code complicated and error prone.
+
+  Since the Compute Engine supports multiple numeric mode, including
+  fixed-precision and arbitrary precision, the special cases that had to be
+  handled could be quite complicated. By using the `NumericValue` type, the code
+  is simpler and more robust.
+
+  A `NumericValue` is made of:
+
+  - an imaginary part, represented as a fixed-precision number
+  - a real part, represented either as a fixed or arbitrary precision number or
+    as the product of a rational number and the square root of an integer.
+
+  For example:
+
+  - 234.567
+  - 1/2
+  - 3√5
+  - √7/3
+  - 4-3i
+
+  While this is a significant change internally, the API remains the same. The
+  result of calculations should be more predictable and more accurate.
+
+  In the future, the `numericValue` property may change to return a
+  `NumericValue` object.
+
+- Improved results for `Expand`. In some cases the expression was not fully
+  expanded. For example, `4x(3x+2)-5(5x-4)` now returns `12x^2 - 17x + 20`.
+  Previously it returned `4x(3x+2)+25x-20`.
+
+- **AsciiMath serialization** The `expr.toString()` method now returns a
+  serialization of the expression using the [AsciiMath](https://asciimath.org/)
+  format.
+
+  The serialization to AsciiMath can be customized using the `toAsciiMath()`
+  method. For example:
+
+  ```js
+  console.log(ce.box(['Sigma', 2]).toAsciiMath({functions: {Sigma: 'sigma'}}));
+  // -> sigma(2)
+  ```
+
+- Added LaTeX syntax to index collections. If `a` is a collection:
+
+  - `a[i]` is parsed as `["At", "a", "i"]`.
+  - `a[i,j]` is parsed as `["At", "a", "i", "j"]`.
+  - `a_i` is parsed as `["At", "a", "i"]`.
+  - `a_{i,j}` is parsed as `["At", "a", "i", "j"]`.
+
+- Added support for Kronecker delta notation, i.e. `\delta_{ij}`, which is
+  parsed as `["KroneckerDelta", "i", "j"]` and is equal to 1 if `i = j` and 0
+  otherwise.
+
+  When a single index is provided the value of the function is 1 if the index is
+  0 and 0 otherwise
+
+  When multiple index are provided, the value of the function is 1 if all the
+  indexes are equal and 0 otherwise.
+
+- Added support for Iverson Bracket notation, i.e. `[a = b]`, which is parsed as
+  `["Boole", ["Equal", "a", "b"]]` and is equal to 1 if its argument is true and
+  0 otherwise. The argument is expected to be a relational expression.
+
+- Implemented `Unique` and `Tally` on collections. `Unique` returns a collection
+  with only the unique elements of the input collection, and `Tally` returns a
+  collection with the count of each unique element.
+
+  ```js
+  console.log(ce.box(['Unique', ['List', 1, 2, 3, 1, 2, 3, 4, 5]]).value);
+  // -> [1, 2, 3, 4, 5]
+
+  console.log(ce.box(['Tally', ['List', 1, 2, 3, 1, 2, 3, 4, 5]]).value);
+  // -> [['List', 1, 2, 3, 4, 5], ['List', 2, 2, 2, 1, 1]]
+  ```
+
+- Implemented the `Map`, `Filter` and `Tabulate` functions. These functions can
+  be used to transform collections, for example:
+
+  ```js
+  // Using LaTeX
+  console.log(ce.parse('\\mathrm{Map}([3, 5, 7], x \\mapsto x^2)').toString());
+  // -> [9, 25, 49]
+
+  // Using boxed expressions
+  console.log(
+    ce.box(['Map', ['List', 3, 5, 7], ['Square', '_']]).value
+  );
+  // -> [9, 25, 49]
+
+  console.log(ce.box(['Tabulate',['Square', '_'], 5]).value);
+  // -> [1, 4, 9, 16, 25]
+  ```
+
+  `Tabulate` can be used with multiple indexes. For example, to generate a 4x4
+  unit matrix:
+
+  ```js
+  console.log(ce.box(['Tabulate', ['If', ['Equal', '_1', '_2'], 1, 0]], 4, 4).value);
+  // -> [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+
+  // Using the Kronecker delta notation:
+  console.log(ce.parse('\\mathrm{Tabulate}(i, j \\mapsto \\delta_{ij}, 4, 4)').value);
+  // -> [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+
+  ```
+
+- Added Choose function to compute binomial coefficients, i.e. `Choose(5, 2)` is
+  equal to 10.
+
+- The fallback for non-constructible complex values of trigonometric functions
+  is now implemented via rules.
+
+### Issues Resolved
+
+- Some LaTeX renderer can't render `\/`, so use `/` instead.
+
+- When definitions are added to the LaTeX dictionary, they now take precedence
+  over the built-in definitions. This allows users to override the built-in
+  definitions.
+
+- Improved parsing of functions, including when a mixture of named and
+  positional arguments are used.
+
+- **#175** Matching some patterns when the target had not enough operands would
+  result in a runtime error.
+
+## 0.25.1 _2024-06-27_
+
+### Issues Resolved
+
+- **#174** Fixed some simplifications, such as `\frac{a^n}{a^m} = a^{n-m)`
+
 ### New Features
+
+- Rules can be defined using a new shorthand syntax, where each rule is a string
+  of LaTeX:
+
+  ```js
+  expr.simplify(["\\frac{x}{x} -> 1", "x + x -> 2x"]);
+  ```
+
+Single letter variables are assumed to be wildcards, so `x` is interpreted as
+the wildcard `_x`.
+
+Additionally, the expanded form can also include LaTeX strings. The previous
+syntax using expressions can still be used, and the new and old syntax can be
+mixed.
+
+For example:
+
+```js
+expr.simplify([
+  {
+    match: "\\frac{x}{x}",
+    replace: "1"
+  },
+  {
+    match: ["Add", "x", "x"],
+    replace: "2x"
+  }
+]);
+```
+
+The `condition` function can also be expressed as a LaTeX string.
+
+```js
+  expr.simplify([ { match: "\\frac{x}{x}", replace: 1, condition: "x != 0" }, ]);
+```
+
+The shorthand syntax can be used any where a ruleset is expected, including with
+the `ce.rule()` function.
+
+- A new `ce.getRuleSet()` method gives access to the built-in rules.
+- **#171** The `Subtract` and `Divide` function can now accept an arbitrary
+  number of arguments. For example, `["Subtract", 1, 2, 3]` is equivalent to
+  `["Subtract", ["Subtract", 1, 2], 3]`.
+
+## 0.25.0 _2024-06-25_
+
+### Breaking Changes
+
+- The canonical form of expressions has changed. It is now more consistent and
+  simpler and should produce more predictable results.
+
+  For example, previously `ce.parse("1-x^2")` would produce
+  `["Subtract", 1, ["Square", "x"]]`.
+
+  While this is a readable form, it introduces some complications when
+  manipulating the expression: both the `Subtract` and `Square` functions have
+  to be handled, in addition to `Add` and `Power`.
+
+  The new canonical form of this expression is
+  `["Add", 1, ["Negate", ["Power", "x", 2]]]`. It is a bit more verbose, but it
+  is simpler to manipulate.
+
+- The `ce.serialize()` method has been replaced with `expr.toLatex()` and
+  `expr.toMathJson()`. The `ce.latexOptions` and `ce.jsonSerializationOptions`
+  properties have been removed. Instead, pass the formating options directly to
+  the `toLatex()` and `toMathJson()` methods. The `ce.parse()` method now takes
+  an optional argument to specify the format of the input string.
+
+- The default JSON serialization of an expression has changed.
+
+  Previously, the default JSON serialization, accessed via the `.json` property,
+  had some transformations applied to it (sugaring) to make the JSON more human
+  readable.
+
+  For example, `ce.parse("\frac12").json` would return the symbol `"Half"`
+  instead of `["Divide", 1, 2]`.
+
+  However, this could lead to some confusion when manipulating the JSON
+  directly. Since the JSON is intended to be used by machine more than humans,
+  these additional transformations have been removed.
+
+  The `expr.json` property now returns the JSON representing the expression,
+  without any transformations.
+
+  To get a version of JSON with some transformations applied use the
+  `ce.toMathJson()` function.
+
+  ```js
+  expr = ce.box(["Subtract", 1, ["Square", "x"]]);
+  console.log(expr.json);
+  // -> ["Add", 1, ["Negate", ["Power", "x", 2]]]
+  expr.toMathJson()
+  // -> ["Subtract", 1, ["Square", "x"]]
+  expr.toMathJson({exclude: "Square"})
+  // -> ["Subtract", 1, ["Power", "x", 2]]
+  ```
+
+  In practice, the impact of both of these changes should be minimal. If you
+  were manipulating expressions using `BoxedExpression`, the new canonical form
+  should make it easier to manipulate expressions. You can potentially simplify
+  your code by removing special cases for functions such as `Square` and
+  `Subtract`.
+
+  If you were using the JSON serialization directly, you may also be able to
+  simplify you code since the default output from `expr.json` is now more
+  consistent and simpler.
+
+- The name of some number formatting options has changed. The number formatting
+  options are an optional argument of `ce.parse()` and `ce.toLatex()`. See the  
+  `NumberFormat` and `NumberSerializationFormat` types.
+
+- The values +infinity, -infinity and NaN are now represented preferably with
+  the symbols `PositiveInfinity`, `NegativeInfinity` and `NaN` respectively.
+  Previously they were represented with numeric values, i.e.
+  `{num: "+Infinity"}`, `{num: "-Infinity"}` and `{num: "NaN"}`. The numeric
+  values are still supported, but the symbols are preferred.
+
+- The method `expr.isNothing` has been removed. Instead, use
+  `expr.symbol === "Nothing"`.
+
+### New Features
+
+- When serializing to LaTeX, the output can be "prettified". This involves
+  modifying the LaTeX output to make it more pleasant to read, for example:
+
+  - `a+\\frac{-b}{c}` -> `a-\\frac{b}{c}`
+  - `a\\times b^{-1}` -> `\\frac{a}{b}`
+  - `\\frac{a}{b}\\frac{c}{d}` -> `\\frac{a\\cdot c}{b\\cdot d}`
+  - `--2` -> `2`
+
+  This is on by default and can be turned off by setting the `prettify` option
+  to `false`. For example:
+
+  ```js
+  ce.parse("a+\\frac{-b}{c}").toLatex({prettify: true})
+  // -> "a-\\frac{b}{c}"
+  ce.parse("a+\\frac{-b}{c}").toLatex({prettify: false})
+  // -> "a+\\frac{-b}{c}"
+  ```
+
+- Numbers can have a different digit group length for the whole and fractional
+  part of a number. For example,
+  `ce.toLatex(ce.parse("1234.5678"), {digitGroup: [3, 0]})` will return
+  `1\,234.5678`.
+- Numbers can now be formatted using South-East Asian Numbering System, i.e.
+  lakh and crore. For example:
+
+  ```js
+  ce.toLatex(ce.parse("12345678"), {digitGroup: "lakh"})
+  // -> "1,23,45,678"
+  ```
+
+- Expressions with Integrate functions can now be compiled to JavaScript. The
+  compiled function can be used to evaluate the integral numerically. For
+  example:
+
+  ```js
+  const f = ce.parse("\\int_0^1 x^2 dx");
+  const compiled = f.compile();
+  console.log(compiled()); // -> 0.33232945619482307
+  ```
 
 - **#82** Support for angular units. The default is radians, but degrees can be
   used by setting `ce.angularUnit = "deg"`. Other possible values are "grad" and
@@ -8,9 +330,30 @@
   interpreted. For example, `sin(90)` will return 1 when `ce.angularUnit` is
   "deg", 0.8939966636005579 when `ce.angularUnit` is "grad" and 0 when
   `ce.angularUnit` is "turn".
+- Added `expr.map(fn)` method to apply a function to each subexpression of an
+  expression. This can be useful to apply custom canonical forms and compare two
+  expressions.
+- An optional canonical form can now be specified with the `ce.function()`.
 
 ### Issues Resolved
 
+- **#173** Parsing `1++2` would result in an expression with a `PreIncrement`
+  function. It is now correctly parsed as `["Add", 1, 2]`.
+- **#161** Power expressions would not be processed when their argument was a
+  Divide expression.
+- **#165** More aggressive simplification of expressions with exponent greater
+  than 3.
+- **#169** Calculating a constant integral (and integral that did not depend on
+  the variable) would result in a runtime error.
+- **#164** Negative mixed fractions (e.g. `-1\frac23`) are now parsed correctly.
+- **#162** Numeric evaluation of expressions with large exponents could result
+  in machine precision numbers instead of bignum numbers.
+- **#155** The expression
+  `["Subtract", ["Multiply", 0.5, "x"], ["Divide", "x", 2]]` will now evaluate
+  to `0`.
+- **#154** In some cases, parsing implicit argument of trig function return more
+  natural results, for example `\cos a \sin b` is now parsed as
+  `(\cos a)(\sin b)` and not `\cos (a \sin b)`.
 - **#147** The associativity of some operators, including `/` was not applied
   correctly, resulting in unexpected results. For example, `1/2/3` would be
   parsed as `["Divide", 1, ["Divide", 2, 3]]` instead of
@@ -20,9 +363,13 @@
   variable and that the expression is a product.
 - **#145** The expression `["Or", "False", "False"]`, that is when all the
   arguments are `False`, is now evaluates to `False`.
-- **#154** In some cases, parsing implicit argument of trig function return more
-  natural results, for example `\cos a \sin b` is now parsed as
-  `(\cos a)(\sin b)` and not `\cos (a \sin b)`.
+- Fixed canonical form of `e^x^2`, and more generally apply power rule in more
+  cases.
+- Added missing "Sech" and "Csch" functions.
+- The digit grouping serializing would place the separator in the wrong place
+  for some numbers.
+- The `avoidExponentsInRange` formating option would not always avoid exponents
+  in the specified range.
 
 ## 0.24.0 _2024-02-23_
 
@@ -946,8 +1293,7 @@ Work around unpckg.com issue with libraries using BigInt.
 
 Read more at
 [Core Reference](https://cortexjs.io/compute-engine/reference/core/) and
-[Arithmetic Reference]
-(https://cortexjs.io/compute-engine/reference/arithmetic/)
+[Arithmetic Reference] (https://cortexjs.io/compute-engine/reference/arithmetic/)
 
 ### Bugs Fixed
 

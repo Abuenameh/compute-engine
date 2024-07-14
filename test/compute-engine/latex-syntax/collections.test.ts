@@ -1,4 +1,8 @@
-import { latex, parse } from '../../utils';
+import { latex, engine as ce } from '../../utils';
+
+function parse(s: string) {
+  return ce.parse(s);
+}
 
 describe('LIST PARSING', () => {
   test('Empty list', () => {
@@ -12,8 +16,11 @@ describe('LIST PARSING', () => {
     expect(parse('\\lbrack x+1\\rbrack')).toMatchInlineSnapshot(
       `["List", ["Add", "x", 1]]`
     );
+  });
+
+  test('Iverson bracket (not a list)', () => {
     expect(parse('\\lbrack x+1=0\\rbrack')).toMatchInlineSnapshot(
-      `["List", ["Equal", ["Add", "x", 1], 0]]`
+      `["Boole", ["Equal", ["Add", "x", 1], 0]]`
     );
   });
 

@@ -1,77 +1,18 @@
-import { Complex } from 'complex.js';
+import Complex from 'complex.js';
 import { Decimal } from 'decimal.js';
 import { complexAllowed, bignumPreferred } from '../boxed-expression/utils';
-import { isMachineRational, isBigRational } from '../numerics/rationals';
-import { BoxedExpression, Hold, Rational } from '../public';
-
-/**
- * Return a rational coef and constant such that `coef * mod + constant = expr`
- */
-// export function multiple(
-//   expr: BoxedExpression,
-//   mod: BoxedExpression
-// ): [coef: [number, number], constant: BoxedExpression] {
-//   if (expr.head === 'Negate') {
-//     const [coef, constant] = multiple(expr.op1, mod);
-//     return [[-coef[0], coef[1]], constant];
-//   }
-
-//   if (expr.head === 'Multiply') {
-//     // @todo
-//   }
-
-//   if (expr.head === 'Divide') {
-//     // @todo
-//   }
-
-//   if (expr.head === 'Add') {
-//     // @todo
-//   }
-
-//   return [[0, 1], expr];
-// }
-
-/**
- * Return a coef, term and constant such that:
- *
- * `coef * term + constant = expr`
- *
- * Return null if no `coef`/`constant` can be found.
- */
-// export function linear(expr: BoxedExpression): null | {
-//   coef: [number, number];
-//   term: BoxedExpression;
-//   constant: [number, number];
-// } {
-//   // @todo
-//   return { coef: [1, 1], term: expr, constant: [0, 1] };
-// }
-
-// @todo: replace usage with asCoefficient():
-// it does the same thing, but also extracts any literal coefficient
-export function makePositive(
-  expr: BoxedExpression
-): [sign: number, expr: BoxedExpression] {
-  if (expr.head === 'Negate') return [-1, expr.op1];
-
-  const n = expr.numericValue;
-  if (n === null) return [1, expr];
-
-  const ce = expr.engine;
-
-  if (typeof n === 'number' && n < 0) return [-1, ce.number(-n)];
-
-  if (n instanceof Decimal && n.isNegative()) return [-1, ce.number(n.neg())];
-
-  // Make the part positive if the real part is negative
-  if (n instanceof Complex && n.re < 0)
-    return [-1, ce.number(ce.complex(-n.re, -n.im))];
-
-  if (isMachineRational(n) && n[0] < 0) return [-1, ce.number([-n[0], n[1]])];
-  if (isBigRational(n) && n[0] < 0) return [-1, ce.number([-n[0], n[1]])];
-
-  return [1, expr];
-}
+import {
+  isMachineRational,
+  isBigRational,
+  Rational,
+} from '../numerics/rationals';
+import {
+  BoxedExpression,
+  Hold,
+  IComputeEngine,
+  SemiBoxedExpression,
+} from '../public';
+import { _BoxedExpression } from '../boxed-expression/abstract-boxed-expression';
 
 export function apply(
   expr: BoxedExpression,
@@ -190,9 +131,28 @@ export function shouldHold(skip: Hold, count: number, index: number): boolean {
   return true;
 }
 
+export function semiCanonical(
+  ce: IComputeEngine,
+  xs: ReadonlyArray<SemiBoxedExpression>
+): ReadonlyArray<BoxedExpression> {
+  if (!xs.every((x) => x instanceof _BoxedExpression))
+    return xs.map((x) => ce.box(x));
+
+  // Avoid memory allocation if possible
+  return (xs as ReadonlyArray<BoxedExpression>).every((x) => x.isCanonical)
+    ? (xs as ReadonlyArray<BoxedExpression>)
+    : ((xs as ReadonlyArray<BoxedExpression>).map(
+        (x) => x.canonical
+      ) as ReadonlyArray<BoxedExpression>);
+}
+
 export function canonical(
   xs: ReadonlyArray<BoxedExpression>
 ): ReadonlyArray<BoxedExpression> {
+  if (!xs.every((x) => x instanceof _BoxedExpression))
+    return xs.map((x) => x.canonical);
   // Avoid memory allocation if possible
-  return xs.every((x) => x.isCanonical) ? xs : xs.map((x) => x.canonical);
+  return xs.every((x) => x instanceof _BoxedExpression && x.isCanonical)
+    ? xs
+    : xs.map((x) => x.canonical);
 }
